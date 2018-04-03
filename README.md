@@ -4,14 +4,12 @@ Software desarrollado con el fin de recolectar y analizar datos de un grupo de d
 
 ##Instalación
 
- - Descargar observatoriolac del repositorio
- - instalar golang:
+ - Clonar el repositorio
+ - Instalar golang:
 
-> $sudo add-apt-repository ppa:ubuntu-lxc/lxd-stable
+> $wget https://storage.googleapis.com/golang/go1.10.1.linux-amd64.tar.gz
 
-> $sudo apt-get update
-
-> $sudo apt-get install golang
+> $sudo tar -zxvf go1.10.1.linux-amd64.tar.gz -C /usr/local/
 
  - Setear path Go:
 
@@ -19,14 +17,15 @@ Modificar el archivo ~/.profile para modificar los paths, para decirle al sistem
 
 >$sudo gedit ~/.profile
 
- - Agregar go al path:
+ - Agregar esta linea al final del archivo para agregar go al path:
 
->$export PATH=$PATH:/usr/local/go/bin
+export GOROOT=/usr/local/go
+export GOPATH=$HOME/Observatorio  #ruta a la carpeta donde clonaron el repositorio
+export PATH=$GOPATH/bin:$GOROOT/bin:$PATH
 
- - Setear el gopath al path donde se encuentra la carpeta
-   ObservatorioLAC, por ejemplo:
+ - Ejecutar el comando siguiente para refrescar el perfil:
 
->$export GOPATH=$HOME/ObservatorioLAC
+>$source ~/.profile
 
 - Instalar Librerías y dependencias
 	1. Librería DNS
@@ -66,9 +65,9 @@ Modificar el archivo ~/.profile para modificar los paths, para decirle al sistem
 
 - Obtener datos geográficos:
 
->$ wget -N -i geoip_url_list.txt
+>$ wget -N -i ~/Observatorio/Utils/geoip_url_list.txt  #agregar ruta a Observatorio
 
->$ mkdir usr/share/GeoIP
+>$ mkdir /usr/share/GeoIP
 
 >$ gunzip GeoIP.dat.gz
 
@@ -108,7 +107,7 @@ con los siguientes argumentos:
 
  > -drop:         true if want to drop database
 
- > -i string:         Input file with domains to analyze
+ > -i string:         Input file with domains to analize
 
  > -p:         Prompt for password?
 
@@ -118,14 +117,12 @@ con los siguientes argumentos:
 
  > -u string:         Database User
 
-
-
 Cuando la recolección termina indica el número de run_id ejecutado. También se puede consultar la tabla runs en la base de datos para ver todas las ejecuciones disponibles(las que no se hayan borrado de la base de datos con la opción -drop=true)
 
 
 Para comenzar a analizar los datos y generar los archivos ejecutar el siguiente comando
 
->\$go run $GOPATH/src/github.com/maitegm/Observatorio/dataAnalyzer/dataAnalyzer.go -pw=dbpassword -u=dbuser -db=dbname -runid=runid
+>\$go run \$GOPATH/src/github.com/maitegm/Observatorio/dataAnalyzer/dataAnalyzer.go -pw=dbpassword -u=dbuser -db=dbname -runid=runid
 
 ó
 
@@ -142,5 +139,3 @@ con los siguientes argumentos:
 >-runid int:         Database run id (default 1)
 
 >-u string:         Database User
-
-
