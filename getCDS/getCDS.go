@@ -10,16 +10,17 @@ import (
 	"github.com/howeyc/gopass"
 	"time"
 	"strings"
-	"github.com/maitegm/Observatorio/dbController"
+	"github.com/niclabs/Observatorio/dbController"
 	"strconv"
 	"github.com/miekg/dns"
 	"runtime"
 	"os"
 	"bufio"
 	"encoding/csv"
+	"github.com/niclabs/Observatorio/utils"
 )
 
-var concurrency int = 100;
+//var Concurrency = 100;
 var dontProbeListFile string;
 var dontProbeList []*net.IPNet;
 
@@ -31,17 +32,15 @@ var mutexT *sync.Mutex
 var mutexTT *sync.Mutex
 var mutexE *sync.Mutex
 var mutexR *sync.Mutex
-var debug bool = false
+var debug = false
 var err error;
 
-var resultsFolder string = "results"
+var resultsFolder = "results"
 var fo *os.File
 
-var Drop bool=false;
+var Drop=false;
 
-func SetConfigurations(c int){
-	concurrency = c
-}
+
 func readLines(path string) ([]string, error) {
 	file, err := os.Open(path)
 	if err != nil {
@@ -56,7 +55,7 @@ func readLines(path string) ([]string, error) {
 	}
 	return lines, scanner.Err()
 }
-func CollectData(db *sql.DB, input_file string, run_id int, debug_var bool ){
+func CollectData(db *sql.DB, input_file string, run_id int, debug_var bool, concurrency int ){
 
 
 	debug=debug_var
@@ -138,29 +137,31 @@ func writeToResultsFile(s string){
 	}
 }
 
-var csv_writer *csv.Writer
+var csvWriter *csv.Writer
 
 func closeResultsFile(){
 	fo.Close()
 }
-var csv_file os.File
+var csvFile os.File
 func initCSV(){
 
 	f:= "2006-01-02T15:04:05"
 	ts := time.Now().Format(f)
 
-	csv_file, err := os.Create("results-"+ts+".csv")
+	filename := "results-"+ts+".csv"
+	folder:="CDS_csvs"
+
+	csvFile, err := utils.CreateFile(folder,filename)
 	if err != nil {
 		fmt.Println(err.Error())
 	}
-	csv_writer = csv.NewWriter(csv_file)
-
+	csvWriter = csv.NewWriter(csvFile)
 }
 
 
 func closeCSV(){
-	csv_writer.Flush()
-	csv_file.Close()
+	csvWriter.Flush()
+	csvFile.Close()
 }
 
 
@@ -168,20 +169,6 @@ func closeCSV(){
 func getCDSInfo(domain_name string, run_id int, config *dns.ClientConfig, db *sql.DB) {
 	c:=new(dns.Client)
 
-
-
-
-
-
-	//var cds_id int
-	/*create domain*/
-	//cds_id = dbController.SaveDomain(domain_name, run_id, db)
-	/*Obtener NS del dominio*/
-
-	//var field_1,field_2, field_3 int
-	//var field_4, field_5 string
-
-	//var server string;
 
 	msg := new(dns.Msg)
 	msg.SetQuestion(domain_name, dns.TypeCDS)
@@ -191,25 +178,26 @@ func getCDSInfo(domain_name string, run_id int, config *dns.ClientConfig, db *sq
 	} else {
 		for _, record := range records.Answer {
 			if _, ok := record.(*dns.CDS); ok {
-				dt:=record.(*dns.CDS).DigestType
-				dg:=record.(*dns.CDS).Digest
-				kt:=record.(*dns.CDS).KeyTag
-				al:=record.(*dns.CDS).Algorithm
-				r := []string{domain_name, strconv.Itoa(int(kt)), strconv.Itoa(int(al)), strconv.Itoa(int(dt)), dg }
-				csv_writer.Write(r)
+				dt := record.(*dns.CDS).DigestType
+				dg := record.(*dns.CDS).Digest
+				kt := record.(*dns.CDS).KeyTag
+				al := record.(*dns.CDS).Algorithm
+				r := []string{domain_name, strconv.Itoa(int(kt)), strconv.Itoa(int(al)), strconv.Itoa(int(dt)), dg}
+				err = csvWriter.Write(r)
+				if(err!=nil){
+					fmt.Println(err)
+				}
 				fmt.Println(r)
-
 				//(dns.CDS)(record).DigestType
 				//(dns.CDS)(record).KeyTag
 				//(dns.CDS)(record).Algorithm
 				//writeToResultsFile(record.String())
 			}
 		}
-		//fmt.Println(records.String())
 	}
 }
 
-func collectCDS(inputfile string, connections int, ccmax int, max_retry int, dropdatabase bool, database string, user string, password string, debug bool){
+func collectCDS(inputfile string, concurrency int, ccmax int, max_retry int, dropdatabase bool, database string, user string, password string, debug bool){
 
 	Drop=dropdatabase
 	var retry int = 0 //initial retry
@@ -221,7 +209,7 @@ func collectCDS(inputfile string, connections int, ccmax int, max_retry int, dro
 	CreateTables(db);
 	db.Close()
 
-	for connections <= ccmax{
+	for concurrency <= ccmax{
 		for retry < max_retry {
 
 			db, err := sql.Open("postgres", "user="+user+" password="+password+" dbname="+database+" sslmode=disable")
@@ -229,15 +217,14 @@ func collectCDS(inputfile string, connections int, ccmax int, max_retry int, dro
 				fmt.Println(err)
 				return
 			}
-			fmt.Println("EXECUTING WITH ",connections, " GOROUTINES; retry: ",retry)
-			writeToResultsFile("EXECUTING WITH "+strconv.Itoa(connections)+ " GOROUTINES; retry: "+strconv.Itoa(retry))
+			fmt.Println("EXECUTING WITH ",concurrency, " GOROUTINES; retry: ",retry)
+			writeToResultsFile("EXECUTING WITH "+strconv.Itoa(concurrency)+ " GOROUTINES; retry: "+strconv.Itoa(retry))
 
 			/*Initialize*/
 			//InitGeoIP()
-			SetConfigurations(connections)
 			run_id := NewRun(db)
 			/*Collect data*/
-			CollectData(db, inputfile, run_id, debug)
+			CollectData(db, inputfile, run_id, debug, concurrency)
 
 			ec:=ErrorsCount
 			tc:=TimeoutsCount
@@ -246,13 +233,12 @@ func collectCDS(inputfile string, connections int, ccmax int, max_retry int, dro
 			fmt.Println("TotalTime(nsec):", tt ," (sec) ", tt/1000000000," (min:sec) ", tt/60000000000,":",tt%60000000000/1000000000)
 			writeToResultsFile("TotalTime(nsec):"+strconv.Itoa(tt) +" (sec) "+strconv.Itoa( tt/1000000000)+" (min:sec) "+strconv.Itoa( tt/60000000000)+":"+strconv.Itoa(tt%60000000000/1000000000))
 			var line string;
-			line = string(strconv.Itoa(run_id) + ", "+ strconv.Itoa(connections) + ", " + strconv.Itoa(retry)+ ", " + strconv.Itoa(ec) + ", " + strconv.Itoa(tc) + ", " +strconv.Itoa(trc) + ", " + strconv.Itoa(tt))
+			line = string(strconv.Itoa(run_id) + ", "+ strconv.Itoa(concurrency) + ", " + strconv.Itoa(retry)+ ", " + strconv.Itoa(ec) + ", " + strconv.Itoa(tc) + ", " +strconv.Itoa(trc) + ", " + strconv.Itoa(tt))
 			fmt.Println(line)
-			//writeToFilePerformanceResults(line)
 			db.Close()
 			retry ++
 		}
-		connections++
+		concurrency++
 		retry=0
 	}
 
@@ -260,21 +246,21 @@ func collectCDS(inputfile string, connections int, ccmax int, max_retry int, dro
 
 func main(){
 
-	inputfile, connections, ccmax, max_retry, dropdatabase, database, user, password, debug := readArguments()
+	inputFile, Concurrency, ccmax, maxRetry, dropDatabase, database, user, password, debug := readArguments()
 
 	initResultsFile()
 	initCSV()
 
-	collectCDS(*inputfile, *connections, ccmax, *max_retry, *dropdatabase, *database, *user, password, *debug)
+	collectCDS(*inputFile, *Concurrency, ccmax, *maxRetry, *dropDatabase, *database, *user, password, *debug)
 
 	closeResultsFile()
 	closeCSV()
 
 }
 
-func readArguments()(inputfile *string, connections *int, ccmax int, max_retry *int, dropdatabase *bool, db *string, u *string, pass string, debug *bool){
+func readArguments()(inputfile *string, concurrency *int, ccmax int, max_retry *int, dropdatabase *bool, db *string, u *string, pass string, debug *bool){
 	inputfile = flag.String("i", "", "Input file with domains to analize")
-	connections = flag.Int("c", 50, "Concurrency: how many routines")
+	concurrency = flag.Int("c", 50, "Concurrency: how many routines")
 	cmax := flag.Int("cmax", -1, "max Concurrency: how many routines")
 	max_retry = flag.Int("retry", 1, "retry:how many times")
 	dropdatabase = flag.Bool("drop", false, "true if want to drop database")
@@ -299,7 +285,7 @@ func readArguments()(inputfile *string, connections *int, ccmax int, max_retry *
 	}
 	ccmax=*cmax
 	if(ccmax==-1){
-		ccmax=*connections
+		ccmax=*concurrency
 	}
 	return
 }

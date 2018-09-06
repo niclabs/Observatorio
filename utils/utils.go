@@ -3,6 +3,7 @@ package utils
 import (
 	"os"
 	"bufio"
+	"fmt"
 )
 
 func ReadLines(path string) ([]string, error) {
@@ -23,10 +24,10 @@ func ReadLines(path string) ([]string, error) {
 func CreateFile(filepath string, filename string)(fo *os.File, err error){
 	InitFolder(filepath)
 	if(err!=nil) {
-		return  os.Create(filepath + "/" + filename)
-
+		fmt.Println(err)
+		return nil,err
 	}
-	return nil,err;
+	return  os.Create(filepath + "/" + filename)
 }
 
 func InitFolder(folder_name string) (error){
@@ -35,5 +36,4 @@ func InitFolder(folder_name string) (error){
 		err = os.Mkdir(folder_name, os.ModePerm)
 	}
 	return err
-
 }
