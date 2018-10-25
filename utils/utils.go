@@ -21,6 +21,11 @@ func ReadLines(path string) ([]string, error) {
 	return lines, scanner.Err()
 }
 
+
+
+
+
+
 func CreateFile(filepath string, filename string)(fo *os.File, err error){
 	InitFolder(filepath)
 	if(err!=nil) {
