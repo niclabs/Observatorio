@@ -94,7 +94,7 @@ func manageError(err string, debug bool){
 	}
 }
 
-func checkSOA(line string, servers []string, c *dns.Client)(*dns.Msg, error){
+func CheckSOA(line string, servers []string, c *dns.Client)(*dns.Msg, error){
 	var soa_records *dns.Msg;
 	var err error;
 	soa_records, _/*rtt*/, err = GetRecordSet(line, dns.TypeSOA, servers,c)
@@ -108,7 +108,7 @@ func cSoa(line string, run_id int, db *sql.DB, servers []string, c *dns.Client, 
 	if (len(servers)!=0) {
 		{
 			SOA := false
-			soa, err := checkSOA(line, servers,c)
+			soa, err := CheckSOA(line, servers,c)
 			if (err != nil) {
 				manageError(strings.Join([]string{"check soa", line, err.Error()}, ""), debug)
 
@@ -124,7 +124,7 @@ func cSoa(line string, run_id int, db *sql.DB, servers []string, c *dns.Client, 
 
 		}
 	}else{
-	fmt.Println("Length of servers is 0")
+		fmt.Println("Length of servers is 0")
 	}
 }
 
@@ -201,14 +201,14 @@ func GetRecordSetWithDNSSEC(line string, t uint16, server string, c *dns.Client)
 	return ExchangeWithRetry(m,c,[]string{server})
 }
 
-func GetRecordSetWithDNSSECformServer(line string, t uint16, server string, c *dns.Client)(*dns.Msg, time.Duration, error) {
+/*func GetRecordSetWithDNSSECformServer(line string, t uint16, server string, c *dns.Client)(*dns.Msg, time.Duration, error) {
 	m := new(dns.Msg)
 	m.SetQuestion(line, t)
 	m.SetEdns0(4096,true)
 	c= new(dns.Client)
 	c.Net="tcp"
 	return ExchangeWithRetry(m,c,[]string{server})
-}
+}*/
 
 func GetRecursivityAndEDNS(line string, ns string, port string, c *dns.Client)(*dns.Msg,time.Duration, error){
 	m := new(dns.Msg)
