@@ -4,7 +4,6 @@ import ("fmt"
 	_ "github.com/lib/pq"
 	"github.com/miekg/dns"
 	"os"
-	"bufio"
 	"time"
 	"net"
 	"runtime"
@@ -14,11 +13,12 @@ import ("fmt"
 	"github.com/abh/geoip"
 	"os/exec"
 	"bytes"
-	//"io/ioutil"
 	"github.com/niclabs/Observatorio/dnsUtils"
 	"github.com/howeyc/gopass"
 	"strconv"
 	"flag"
+	"github.com/niclabs/Observatorio/geoIPUtils"
+	"github.com/niclabs/Observatorio/utils"
 )
 
 /*
@@ -38,12 +38,12 @@ var mutexT *sync.Mutex
 var mutexTT *sync.Mutex
 var mutexE *sync.Mutex
 var mutexR *sync.Mutex
-var debug bool = false
+var debug = false
 var err error;
-var gi *geoip.GeoIP;
-var giv6 *geoip.GeoIP;
-var giasn *geoip.GeoIP;
-var giasnv6 *geoip.GeoIP;
+var geoipv4_country_db *geoip.GeoIP;
+var geoipv6_country_db *geoip.GeoIP;
+var geoipv4_asn_db *geoip.GeoIP;
+var geoipv6_asn_db *geoip.GeoIP;
 func main(){
 	input, dp, con, ccmax, max_retry, dropdatabase, db, u, pass, debug:=readArguments()
 	initFilePerformanceResults()
@@ -165,7 +165,7 @@ func InitializeDontProbeList(dpf string){
 		fmt.Println("no dont Pobe list file found")
 		return
 	}
-	lines, err := readLines(dontProbeListFile)
+	lines, err := utils.ReadLines(dontProbeListFile)
 	if(err!=nil){
 		fmt.Println(err.Error())
 
@@ -189,22 +189,22 @@ func SetConfigurations(c int){
 func InitGeoIP(){
 	checkDatabases()
 
-	gi,err = getGeoIpCountryDB()
+	geoipv4_country_db,err = getGeoIpCountryDB()
 	if(err!=nil) {
 		fmt.Println(err.Error())
 	}
 
-	giv6,err = getGeoIpv6CountryDB()
+	geoipv6_country_db,err = getGeoIpv6CountryDB()
 	if(err!=nil) {
 		fmt.Println(err.Error())
 	}
 
-	giasn, err = getGeoIpAsnDB()
+	geoipv4_asn_db, err = getGeoIpAsnDB()
 	if(err!=nil) {
 		fmt.Println(err.Error())
 	}
 
-	giasnv6, err = getGeoIpAsnv6DB()
+	geoipv6_asn_db, err = getGeoIpAsnv6DB()
 	if(err!=nil) {
 		fmt.Println(err.Error())
 	}
@@ -294,7 +294,7 @@ func CollectData(db *sql.DB, inputFile string, dpf string, run_id int, d bool ){
 	debug=d
 	dontProbeListFile=dpf
 	t:=time.Now()
-	lines, err := readLines(inputFile)
+	lines, err := utils.ReadLines(inputFile)
 	if(err!=nil){
 		fmt.Println(err.Error())
 	}
@@ -357,7 +357,7 @@ func getDomainInfo(line string, run_id int, config *dns.ClientConfig, db *sql.DB
 	var server string;
 	{
 		/*Obtener NS del dominio*/
-		nss, _, err := GetRecordSet(line, dns.TypeNS, config.Servers,c)
+		nss, _, err := dnsUtils.GetRecordSet(line, dns.TypeNS, config.Servers,c)
 		if (err != nil) {
 			if(nss!=nil){
 				fmt.Println("error but answer",nss.String())
@@ -380,7 +380,7 @@ func getDomainInfo(line string, run_id int, config *dns.ClientConfig, db *sql.DB
 			for _, ns := range nss.Answer {
 				if ns, ok := ns.(*dns.NS); ok {
 					var nameserverid int
-					available, rtt, err := checkAvailability(line, ns,c)
+					available, rtt, err := dnsUtils.CheckAvailability(line, ns,c)
 					if (err != nil) {
 						nameserverid = dbController.CreateNS(ns, domainid, run_id, db, false)
 						manageError(strings.Join([]string{"checkAvailability", line, ns.Ns, err.Error(), rtt.String()}, ""))
@@ -395,7 +395,7 @@ func getDomainInfo(line string, run_id int, config *dns.ClientConfig, db *sql.DB
 						{
 							/*get A and AAAA*/
 							//getANSRecord:
-							ipv4, err := getARecords(ns.Ns, config.Servers,c)
+							ipv4, err := dnsUtils.GetARecords(ns.Ns, config.Servers,c)
 							if (err != nil) {
 
 								manageError(strings.Join([]string{"getANS", line, ns.Ns, err.Error()}, ""))
@@ -404,7 +404,8 @@ func getDomainInfo(line string, run_id int, config *dns.ClientConfig, db *sql.DB
 								for _, ip := range ipv4 {
 									ips := net.IP.String(ip)
 									dontProbe := true
-									country, asn := getIPinfo(ips)
+									asn := geoIPUtils.GetIPASN(ips, geoipv4_asn_db)
+									country := geoIPUtils.GetIPCountry(ips, geoipv4_country_db)
 									if (isIPInDontProbeList(ip)) {
 										fmt.Println("domain ", line, "in DontProbeList", ip)
 										//TODO Future: save DONTPROBELIST in nameserver? and Domain?
@@ -417,14 +418,15 @@ func getDomainInfo(line string, run_id int, config *dns.ClientConfig, db *sql.DB
 								}
 							}
 							//getAAAANSRecord:
-							ipv6, err := getAAAARecords(ns.Ns, config.Servers,c)
+							ipv6, err := dnsUtils.GetAAAARecords(ns.Ns, config.Servers,c)
 							if (err != nil) {
 
 								manageError(strings.Join([]string{"getAAAANS", line, ns.Ns, err.Error()}, ""))
 							} else {
 								for _, ip := range ipv6 {
 									ips := net.IP.String(ip)
-									country, asn := getIPv6info(ips)
+									country:= geoIPUtils.GetIPv6Country(ips, geoipv6_country_db)
+									asn := geoIPUtils.GetIPv6ASN(ips, geoipv6_asn_db)
 									dbController.SaveNSIP(nameserverid, ips, country, asn, false, run_id, db)
 								}
 							}
@@ -440,7 +442,7 @@ func getDomainInfo(line string, run_id int, config *dns.ClientConfig, db *sql.DB
 								//edns, recursivity, tcp, zone_transfer, loc_query
 								//------------------------------Recursividad y EDNS----------------------
 								RecAndEDNS := new(dns.Msg)
-								RecAndEDNS, rtt, err = getRecursivityAndEDNS(line, ns.Ns, "53",c)
+								RecAndEDNS, rtt, err = dnsUtils.GetRecursivityAndEDNS(line, ns.Ns, "53",c)
 								if (err != nil) {
 									manageError(strings.Join([]string{"Rec and EDNS", line, ns.Ns, err.Error(), rtt.String()}, ""))
 								} else {
@@ -456,7 +458,7 @@ func getDomainInfo(line string, run_id int, config *dns.ClientConfig, db *sql.DB
 
 								//TCP---------------------
 								c.Net="tcp"
-								tcp, _, err := getRecordSetTCP(line, dns.TypeSOA, []string{ns.Ns},c)
+								tcp, _, err := dnsUtils.GetRecordSetTCP(line, dns.TypeSOA, []string{ns.Ns},c)
 								c.Net="udp"
 								if (err != nil) {
 									//manageError(strings.Join([]string{"TCP", line, ns.Ns, err.Error()},""))
@@ -470,7 +472,7 @@ func getDomainInfo(line string, run_id int, config *dns.ClientConfig, db *sql.DB
 								}
 
 								//Zone transfer---------------------
-								zt, err := zoneTransfer(line, ns.Ns)
+								zt, err := dnsUtils.ZoneTransfer(line, ns.Ns)
 								if (err != nil) {
 									manageError(strings.Join([]string{"zoneTransfer", line, ns.Ns, err.Error()}, ""))
 								} else {
@@ -488,7 +490,7 @@ func getDomainInfo(line string, run_id int, config *dns.ClientConfig, db *sql.DB
 
 
 								//Wrong Queries (tipos extraños como loc)
-								loc, _, err := GetRecordSet(line, dns.TypeLOC, []string{ns.Ns},c)
+								loc, _, err := dnsUtils.GetRecordSet(line, dns.TypeLOC, []string{ns.Ns},c)
 								if (err != nil) {
 									manageError(strings.Join([]string{"locQuery", line, ns.Ns, err.Error()}, ""))
 								} else {
@@ -518,7 +520,7 @@ func getDomainInfo(line string, run_id int, config *dns.ClientConfig, db *sql.DB
 		{
 			//Get A and AAAA records
 
-			ipv4, err := getARecords(line, []string{server},c)
+			ipv4, err := dnsUtils.GetARecords(line, []string{server},c)
 
 			if (err != nil) {
 				manageError(strings.Join([]string{"get a record", line, err.Error()}, ""))
@@ -529,7 +531,7 @@ func getDomainInfo(line string, run_id int, config *dns.ClientConfig, db *sql.DB
 				}
 			}
 
-			ipv6, err := getAAAARecords(line, []string{server},c)
+			ipv6, err := dnsUtils.GetAAAARecords(line, []string{server},c)
 			if (err != nil) {
 
 				manageError(strings.Join([]string{"get AAAA record", line, err.Error()}, ""))
@@ -545,7 +547,7 @@ func getDomainInfo(line string, run_id int, config *dns.ClientConfig, db *sql.DB
 		{
 			/*check soa*/
 			SOA := false
-			soa, err := checkSOA(line, []string{server},c)
+			soa, err := dnsUtils.CheckSOA(line, []string{server},c)
 			if (err != nil) {
 				manageError(strings.Join([]string{"check soa", line, err.Error()}, ""))
 
@@ -570,7 +572,7 @@ func getDomainInfo(line string, run_id int, config *dns.ClientConfig, db *sql.DB
 			/*check DNSSEC*/
 
 			/*ds*/
-			dss, _, err := GetRecordSet(line, dns.TypeDS, config.Servers,c)
+			dss, _, err := dnsUtils.GetRecordSet(line, dns.TypeDS, config.Servers,c)
 			if (err != nil) {
 				//manageError(strings.Join([]string{"DS record", line, err.Error()}, ""))
 			} else {
@@ -590,7 +592,7 @@ func getDomainInfo(line string, run_id int, config *dns.ClientConfig, db *sql.DB
 					}
 				}
 				if(ds_found) {
-					rrsigs, _, err := GetRecordSetWithDNSSEC(line, dns.TypeDS, config.Servers[0], c)
+					rrsigs, _, err := dnsUtils.GetRecordSetWithDNSSEC(line, dns.TypeDS, config.Servers[0], c)
 					if (err != nil) {
 						//manageError(strings.Join([]string{"DS record", line, err.Error()}, ""))
 					} else {
@@ -609,9 +611,9 @@ func getDomainInfo(line string, run_id int, config *dns.ClientConfig, db *sql.DB
 									expired = true
 								}
 								//---------------DNSKEY----------------------------
-								dnskeys, _, _ = GetRecordSetWithDNSSEC(rrsig.SignerName, dns.TypeDNSKEY, config.Servers[0], c)
+								dnskeys, _, _ = dnsUtils.GetRecordSetWithDNSSEC(rrsig.SignerName, dns.TypeDNSKEY, config.Servers[0], c)
 								if (dnskeys != nil && dnskeys.Answer != nil) {
-									key := findKey(dnskeys, rrsig)
+									key := dnsUtils.FindKey(dnskeys, rrsig)
 									if (key != nil) {
 										key_found = true
 										if err := rrsig.Verify(key, ds_rrset); err != nil {
@@ -640,7 +642,7 @@ func getDomainInfo(line string, run_id int, config *dns.ClientConfig, db *sql.DB
 
 
 
-			dnskeys_line, _, err := GetRecordSetWithDNSSEC(line, dns.TypeDNSKEY, server,c)
+			dnskeys_line, _, err := dnsUtils.GetRecordSetWithDNSSEC(line, dns.TypeDNSKEY, server,c)
 			if (err != nil) {
 				manageError(strings.Join([]string{"dnskey", line, err.Error()}, ""))
 			} else {
@@ -684,9 +686,9 @@ func getDomainInfo(line string, run_id int, config *dns.ClientConfig, db *sql.DB
 								expired = true
 							}
 							//---------------DNSKEY----------------------------
-							dnskeys, _, _ = GetRecordSetWithDNSSEC(rrsig1.SignerName, dns.TypeDNSKEY, config.Servers[0], c)
+							dnskeys, _, _ = dnsUtils.GetRecordSetWithDNSSEC(rrsig1.SignerName, dns.TypeDNSKEY, config.Servers[0], c)
 							if (dnskeys != nil && dnskeys.Answer != nil) {
-								key := findKey(dnskeys, rrsig1)
+								key := dnsUtils.FindKey(dnskeys, rrsig1)
 								if (key != nil) {
 									key_found = true
 									if err := rrsig1.Verify(key, dnskey_rrset); err != nil {
@@ -714,7 +716,7 @@ func getDomainInfo(line string, run_id int, config *dns.ClientConfig, db *sql.DB
 						d := line
 						line := "zskldhoisdh123dnakjdshaksdjasmdnaksjdh" + "." + d
 						t := dns.TypeA
-						in, _, err := GetRecordSetWithDNSSECformServer(line, t, server,c)
+						in, _, err := dnsUtils.GetRecordSetWithDNSSEC(line, t, server,c)
 						if (err != nil) {
 							fmt.Println(err.Error())
 							manageError(strings.Join([]string{"nsec/3", line, err.Error()}, ""))
@@ -763,7 +765,7 @@ func getDomainInfo(line string, run_id int, config *dns.ClientConfig, db *sql.DB
 											}
 											//---------------DNSKEY----------------------------
 											if (rrsig.SignerName != line) {
-												dnskeys, _, _ = GetRecordSetWithDNSSEC(rrsig.SignerName, dns.TypeDNSKEY, config.Servers[0], c)
+												dnskeys, _, _ = dnsUtils.GetRecordSetWithDNSSEC(rrsig.SignerName, dns.TypeDNSKEY, config.Servers[0], c)
 											} else {
 												dnskeys = dnskeys_line
 											}
@@ -771,7 +773,7 @@ func getDomainInfo(line string, run_id int, config *dns.ClientConfig, db *sql.DB
 
 
 											if (dnskeys != nil && dnskeys.Answer != nil) {
-												key := findKey(dnskeys, rrsig)
+												key := dnsUtils.FindKey(dnskeys, rrsig)
 												if (key != nil) {
 													key_found = true
 													var rrset []dns.RR
@@ -827,12 +829,12 @@ func getDomainInfo(line string, run_id int, config *dns.ClientConfig, db *sql.DB
 											}
 											//---------------DNSKEY----------------------------
 											if (rrsig.SignerName != line) {
-												dnskeys, _, _ = GetRecordSetWithDNSSEC(rrsig.SignerName, dns.TypeDNSKEY, config.Servers[0],c)
+												dnskeys, _, _ = dnsUtils.GetRecordSetWithDNSSEC(rrsig.SignerName, dns.TypeDNSKEY, config.Servers[0],c)
 											} else {
 												dnskeys = dnskeys_line
 											}
 											if (dnskeys != nil && dnskeys.Answer != nil) {
-												key := findKey(dnskeys, rrsig)
+												key := dnsUtils.FindKey(dnskeys, rrsig)
 												if (key != nil) {
 													key_found = true
 													var rrset []dns.RR
@@ -859,152 +861,9 @@ func getDomainInfo(line string, run_id int, config *dns.ClientConfig, db *sql.DB
 		}
 	}
 }
-func readLines(path string) ([]string, error) {
-	file, err := os.Open(path)
-	if err != nil {
-		return nil, err
-	}
-	defer file.Close()
 
-	var lines []string
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		lines = append(lines, scanner.Text())
-	}
-	return lines, scanner.Err()
-}
-func zoneTransfer(line string, ns string )(chan *dns.Envelope, error){
-	m := new(dns.Msg)
-	m.Id = dns.Id()
-	m.SetAxfr(line)
-	t := new(dns.Transfer)
-	zt, err := t.In(m, ns + ":53")
-	if(err==nil){
-		t.Close()
-	}
-	return zt, err
-}
-func getRecursivityAndEDNS(line string, ns string, port string, c *dns.Client)(*dns.Msg,time.Duration, error){
-	m := new(dns.Msg)
-	m.SetEdns0(4096, true)
-	m.SetQuestion(line, dns.TypeSOA)
-	return exchangeWithRetry(m,c,[]string{ns})
-}
-func GetRecordSetWithDNSSEC(line string, t uint16, server string, c *dns.Client)(*dns.Msg, time.Duration, error){
-	m := new(dns.Msg)
-	m.SetQuestion(line, t)
-	m.SetEdns0(4096,true)
-	c= new(dns.Client)
-	c.Net="tcp"
-	return exchangeWithRetry(m,c,[]string{server})
-}
-func checkAvailability(domain string,ns *dns.NS, c *dns.Client)(bool, time.Duration, error){
-	_, rtt, err := GetRecordSet(domain, dns.TypeA, []string{ns.Ns},c)
-	if err != nil {
-		return false, rtt, err
-	}
-	return true, rtt,nil
 
-}
-func GetRecordSetWithDNSSECformServer(line string, t uint16, server string, c *dns.Client)(*dns.Msg, time.Duration, error) {
-	m := new(dns.Msg)
-	m.SetQuestion(line, t)
-	m.SetEdns0(4096,true)
-	c= new(dns.Client)
-	c.Net="tcp"
-	return exchangeWithRetry(m,c,[]string{server})
-}
-func GetRecordSet(line string, t uint16, server []string, c *dns.Client)(*dns.Msg, time.Duration, error){
-	m := new(dns.Msg)
-	m.SetQuestion(line, t)
-	return exchangeWithRetry(m,c,server)
-}
-func exchangeWithRetry(m *dns.Msg, c *dns.Client, server []string)(*dns.Msg, time.Duration, error){
-	var records *dns.Msg;
-	var err error;
-	var rtt time.Duration;
-	for retry:=3; retry>0; retry-- {
-		records, rtt, err = c.Exchange(m, server[retry%len(server)] +":53")
-		if (err == nil){
-			if (len(records.Answer)>0){
 
-				break;
-			}
-		}else if(strings.IndexAny(err.Error(),"timeout")<0){//si el error no es timeout
-			break;
-		}else{
-			mutexR.Lock()
-			TimeoutsRetryCount++;
-			mutexR.Unlock()
-		}
-	}
-	if(err!=nil){
-		mutexE.Lock()
-		ErrorsCount++;
-		mutexE.Unlock()
-		if(strings.IndexAny(err.Error(),"timeout")>-1){
-			mutexT.Lock()
-			TimeoutsCount++;
-			mutexT.Unlock()
-		}
-	}
-
-	return records, rtt, err
-}
-func getRecordSetTCP(line string, t uint16, servers []string, c *dns.Client)(*dns.Msg, time.Duration, error){
-	m := new(dns.Msg)
-	m.SetQuestion(line, t)
-	c.Net="tcp"
-	return exchangeWithRetry(m,c,servers)
-}
-func checkSOA(line string, servers []string, c *dns.Client)(*dns.Msg, error){
-	var soa_records *dns.Msg;
-	var err error;
-	soa_records, _/*rtt*/, err = GetRecordSet(line, dns.TypeSOA, servers,c)
-	return soa_records,err;
-}
-func getARecords(line string, servers []string, c *dns.Client)([]net.IP, error){
-	var a_records *dns.Msg;
-	var err error;
-	a_records, _, err = GetRecordSet(line,dns.TypeA, servers,c)
-	if(err!=nil){
-		return nil, err
-	}
-	IPv4s:=[]net.IP{}
-	for _,a := range a_records.Answer{
-		if a1, ok := a.(*dns.A); ok{
-			IPv4s = append(IPv4s,a1.A)
-		}
-	}
-	return IPv4s,nil
-}
-func getAAAARecords(line string, servers []string, c *dns.Client)([]net.IP, error){
-	var aaaa_records *dns.Msg;
-	var err error;
-	aaaa_records, _, err = GetRecordSet(line,dns.TypeAAAA, servers,c)
-	if(err!=nil){
-		return nil, err
-	}
-	IPv6s:=[]net.IP{}
-	for _,a := range aaaa_records.Answer{
-		if a1, ok := a.(*dns.AAAA); ok{
-			IPv6s = append(IPv6s,a1.AAAA)
-		}
-	}
-	return IPv6s,nil
-}
-func getIPinfo(ip string)(string, string){
-	c,_ := gi.GetCountry(ip)
-	asn,_ := giasn.GetName(ip)
-	asn = strings.Split(asn," ")[0]
-	return c, asn
-}
-func getIPv6info(ip string)(string, string){
-	c,_ := giv6.GetCountry_v6(ip)
-	asn,_ := giasnv6.GetNameV6(ip)
-	asn = strings.Split(asn," ")[0]
-	return c, asn
-}
 func isIPInDontProbeList(ip net.IP)(bool){
 	var ipnet *net.IPNet
 	for _,ipnet=range dontProbeList{
@@ -1014,18 +873,4 @@ func isIPInDontProbeList(ip net.IP)(bool){
 		}
 	}
 	return false;
-}
-func findKey(dnskeys *dns.Msg, rrsig *dns.RRSIG)(*dns.DNSKEY){
-	var key *dns.DNSKEY
-	for _, dnskey := range dnskeys.Answer {//Encontrar la llave que firma este RRSIG
-		//RRset of type DNSKEY
-		if dnskey1, ok := dnskey.(*dns.DNSKEY); ok {
-			//DNSKEYset that signs the RRset to chase:
-			if dnskey1.KeyTag() == rrsig.KeyTag {
-				// RRSIG of the DNSKEYset that signs the RRset to chase:
-				key = dnskey1
-			}
-		}
-	}
-	return key
 }
