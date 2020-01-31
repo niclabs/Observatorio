@@ -86,6 +86,10 @@ export PATH=$GOPATH/bin:$GOROOT/bin:$PATH
 >$ mv GeoIPASNumv6.dat /usr/share/GeoIP/
 
 
+https://download.maxmind.com/app/geoip_download?edition_id=GeoLite2-ASN&license_key=YOUR_LICENSE_KEY&suffix=tar.gz
+
+
+
 ##Modo de uso
 
 Para comenzar la recoleccion de datos ejecutar el siguiente comando:
@@ -139,3 +143,20 @@ con los siguientes argumentos:
 >-runid int:         Database run id (default 1)
 
 >-u string:         Database User
+
+
+
+
+
+
+
+go get github.com/miekg/dns
+go get github.com/lib/pq
+go get github.com/howeyc/gopass
+
+sudo apt-get install libgeoip-dev    # or 'brew install pkg-config'
+go get github.com/abh/geoip
+
+go get github.com/niclabs/Observatorio/utils
+go get github.com/niclabs/Observatorio/dnsUtils
+go get github.com/niclabs/Observatorio/dbController

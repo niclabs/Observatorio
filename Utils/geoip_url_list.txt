@@ -2,3 +2,9 @@ http://geolite.maxmind.com/download/geoip/database/GeoLiteCountry/GeoIP.dat.gz
 http://geolite.maxmind.com/download/geoip/database/GeoIPv6.dat.gz
 http://download.maxmind.com/download/geoip/database/asnum/GeoIPASNum.dat.gz
 http://download.maxmind.com/download/geoip/database/asnum/GeoIPASNumv6.dat.gz
+
+
+
+https://download.maxmind.com/app/geoip_download?edition_id=GeoLite2-ASN&suffix=tar.gz&license_key=YOUR_LICENSE_KEY
+https://download.maxmind.com/app/geoip_download?edition_id=GeoLite2-Country&suffix=tar.gz&license_key=YOUR_LICENSE_KEY
+https://download.maxmind.com/app/geoip_download?edition_id=GeoLite2-City&suffix=tar.gz&license_key=YOUR_LICENSE_KEY
