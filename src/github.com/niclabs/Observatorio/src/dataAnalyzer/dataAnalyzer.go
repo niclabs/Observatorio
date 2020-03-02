@@ -1,6 +1,6 @@
 package main
 import(
-	"github.com/niclabs/Observatorio/dbController"
+	"github.com/niclabs/Observatorio/src/dbController"
 	"database/sql"
 	_ "github.com/lib/pq"
 	//"github.com/miekg/dns"

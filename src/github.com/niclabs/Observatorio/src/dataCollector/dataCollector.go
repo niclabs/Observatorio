@@ -9,14 +9,14 @@ import ("fmt"
 	"runtime"
 	"sync"
 	"strings"
-	"dbController"
+	"github.com/niclabs/Observatorio/src/dbController"
 	"github.com/oschwald/geoip2-golang"
-	"dnsUtils"
+	"github.com/niclabs/Observatorio/src/dnsUtils"
 	
 	"strconv"
 	
-	"geoIPUtils"
-	"utils"
+	"github.com/niclabs/Observatorio/src/geoIPUtils"
+	"github.com/niclabs/Observatorio/src/utils"
 )
 
 
@@ -24,14 +24,9 @@ var concurrency int = 100;
 var dontProbeListFile string;
 var dontProbeList []*net.IPNet;
 
-var ErrorsCount int
-var TimeoutsCount int
-var TimeoutsRetryCount int
 var TotalTime int
-var mutexT *sync.Mutex
-var mutexTT *sync.Mutex
-var mutexE *sync.Mutex
-var mutexR *sync.Mutex
+
+
 var debug = false
 var err error;
 var geoip_country_db *geoip2.Reader;
@@ -44,7 +39,7 @@ var performanceResultsFolder string = "performanceResults"
 var fo *os.File
 func InitFilePerformanceResults(){
 	var err error;
-	f:= "2006-01-02T15:04:05"
+	f:= "2006-01-02T15:04:05" //format file name
 	ts := time.Now().Format(f)
 
 	if _, err := os.Stat(performanceResultsFolder); os.IsNotExist(err) {
@@ -70,7 +65,7 @@ func closeFilePerformanceResults(){
 }
 func Collect(input string, dpf string, c int, max_c int, max_retry int, drop bool, dbname string, user string, password string, debug bool) {
 
-	writeToFilePerformanceResults("runid, goroutines, retry, errorCount, timeoutCount, timeoutRetruCount, totalTime")
+	writeToFilePerformanceResults("runid, goroutines, retry, totalTime")
 	var retry int = 0 //initial retry
 	dbController.Drop=drop
 	InitializeDontProbeList(dpf)
@@ -97,14 +92,11 @@ func Collect(input string, dpf string, c int, max_c int, max_retry int, drop boo
 			/*Collect data*/
 			CollectData(db, input, dpf, run_id, debug)
 
-			ec:=ErrorsCount
-			tc:=TimeoutsCount
-			trc:=TimeoutsRetryCount
 			tt:=TotalTime
 			fmt.Println("TotalTime(nsec):", tt ," (sec) ", tt/1000000000," (min:sec) ", tt/60000000000,":",tt%60000000000/1000000000)
 
 			var line string;
-			line = string(strconv.Itoa(run_id) + ", "+ strconv.Itoa(c) + ", " + strconv.Itoa(retry)+ ", " + strconv.Itoa(ec) + ", " + strconv.Itoa(tc) + ", " +strconv.Itoa(trc) + ", " + strconv.Itoa(tt))
+			line = string(strconv.Itoa(run_id) + ", "+ strconv.Itoa(c) + ", " + strconv.Itoa(retry)+ ", " + strconv.Itoa(tt))
 			writeToFilePerformanceResults(line)
 			db.Close()
 			retry ++
@@ -155,13 +147,7 @@ func CollectData(db *sql.DB, inputFile string, dpf string, run_id int, d bool ){
 	config, _ := dns.ClientConfigFromFile("/etc/resolv.conf")
 	runtime.GOMAXPROCS(runtime.NumCPU())
 	fmt.Println("num CPU:",runtime.NumCPU())
-	mutexR = &sync.Mutex{}
-	mutexT = &sync.Mutex{}
-	mutexE = &sync.Mutex{}
-	mutexTT = &sync.Mutex{}
-	ErrorsCount = 0
-	TimeoutsCount = 0
-	TimeoutsRetryCount = 0;
+	
 	TotalTime = 0
 	getDataQueue := make(chan string, concurrency)
 	wg := sync.WaitGroup{}
@@ -170,14 +156,11 @@ func CollectData(db *sql.DB, inputFile string, dpf string, run_id int, d bool ){
 	for i := 0; i < concurrency; i++ {
 		go func(run_id int) {
 			j:=0
-			totalTime:=0
 			for line := range getDataQueue {
-				t2:=time.Now()
+				//t2:=time.Now()
 				getDomainInfo(line, run_id, config, db)
-				duration := time.Since(t2)
-				mutexTT.Lock()
-				totalTime += int(duration)
-				mutexTT.Unlock()
+				//duration := time.Since(t2)
+			
 				j++
 			}
 			wg.Done()

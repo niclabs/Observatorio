@@ -1,0 +1,15 @@
+# Database configurations
+database:
+  dbname: "observatorio"
+  user: "obslac"
+  pass: "password"
+
+#runing arguments
+runargs:
+  inputfilepath: "input-example.txt"
+  dontprobefilepath: ""
+  concurrency: 100
+  ccmax: 100
+  maxretry: 2
+  dropdatabase: false
+  debug: false

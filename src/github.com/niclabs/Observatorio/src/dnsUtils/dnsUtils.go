@@ -5,7 +5,7 @@ import (
 
 	"github.com/miekg/dns"
 	"database/sql"
-	"github.com/niclabs/Observatorio/dbController"
+	"github.com/niclabs/Observatorio/src/dbController"
 	"strings"
 	"time"
 	"fmt"
