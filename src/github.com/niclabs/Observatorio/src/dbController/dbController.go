@@ -6,69 +6,65 @@ import(
 	"strings"
 	"time"
 )
-//set to true when tables are updated WARNING:all data will be erased!!
-var Drop bool=false;
-
-func CreateTables(db *sql.DB){
-
-	DropTable("runs",db)
+func CreateTables(db *sql.DB, drop bool){
+	DropTable("runs",db, drop)
 	_,err := db.Exec("CREATE TABLE  IF NOT EXISTS runs ( id SERIAL PRIMARY KEY, tstmp timestamp, correct_run bool, duration int)")
 	if err != nil {
 		fmt.Println("OpenConnections",db.Stats())
 		panic(err)
 	}
 
-	DropTable("domain", db)
+	DropTable("domain", db, drop)
 	_,err = db.Exec("CREATE TABLE  IF NOT EXISTS domain ( id SERIAL PRIMARY KEY, run_id integer REFERENCES runs(id),name varchar(253), soa bool, non_existence_status int, nsec bool, nsecok bool, nsec3 bool, nsec3ok bool, wildcard bool, dnssec_ok bool, ds_found bool, ds_ok bool, dnskey_found bool, dnskey_ok bool)")
 	if err != nil {
 		fmt.Println("OpenConnections",db.Stats())
 		panic(err)
 	}
 
-	DropTable("nameserver", db)
+	DropTable("nameserver", db, drop)
 	_,err = db.Exec("CREATE TABLE IF NOT EXISTS nameserver ( id SERIAL PRIMARY KEY, run_id integer REFERENCES runs(id), domain_id  integer REFERENCES domain(id), name varchar(253), response bool, edns bool, recursivity bool, tcp bool, zone_transfer bool, loc_query bool)")
 	if err != nil {
 		fmt.Println("OpenConnections",db.Stats())
 		panic(err)
 	}
-	DropTable("nameserver_ip", db)
+	DropTable("nameserver_ip", db, drop)
 	_,err = db.Exec("CREATE TABLE IF NOT EXISTS nameserver_ip ( id SERIAL PRIMARY KEY, run_id integer REFERENCES runs(id), nameserver_id integer REFERENCES nameserver(id), ip inet, country varchar(30), asn varchar(10), dont_probe bool )")
 	if err != nil {
 		fmt.Println("OpenConnections",db.Stats())
 		panic(err)
 	}
-	DropTable("domain_ip", db)
+	DropTable("domain_ip", db, drop)
 	_,err = db.Exec("CREATE TABLE IF NOT EXISTS domain_ip ( id SERIAL PRIMARY KEY, run_id integer REFERENCES runs(id), domain_id integer REFERENCES domain(id), ip inet)")
 	if err != nil {
 		fmt.Println("OpenConnections",db.Stats())
 		panic(err)
 	}
-	DropTable("dnskey", db)
+	DropTable("dnskey", db, drop)
 	_,err = db.Exec("CREATE TABLE IF NOT EXISTS dnskey ( id SERIAL PRIMARY KEY, run_id integer REFERENCES runs(id), domain_id integer REFERENCES domain(id), public_key varchar(4096), owner varchar(253), ttl integer, type integer, protocol integer, algorithm integer, keytag integer, DSok bool)")
 	if err != nil {
 		fmt.Println("OpenConnections",db.Stats())
 		panic(err)
 	}
-	DropTable("rrsig", db)
+	DropTable("rrsig", db, drop)
 	_,err = db.Exec("CREATE TABLE IF NOT EXISTS rrsig (id SERIAL PRIMARY KEY, run_id integer REFERENCES runs(id), domain_id integer REFERENCES domain(id), owner varchar(253), type_covered varchar(5), algorithm integer, labels integer, ttl integer, signature_expiration varchar(50), signature_inception varchar(50), keytag integer, signers_name varchar(48), signature varchar(1024))")
 	if err != nil {
 		fmt.Println("OpenConnections",db.Stats())
 		panic(err)
 	}
-	DropTable("nsec", db)
+	DropTable("nsec", db, drop)
 	_,err = db.Exec("CREATE TABLE IF NOT EXISTS nsec ( id SERIAL PRIMARY KEY, run_id integer REFERENCES runs(id), domain_id integer REFERENCES domain(id), name varchar(253),  next_name varchar(253), ttl integer, rrsig_ok bool, cover bool, coverwc bool, iswc bool)")
 	if err != nil {
 		fmt.Println("OpenConnections",db.Stats())
 		panic(err)
 	}
-	DropTable("nsec3", db)
+	DropTable("nsec3", db, drop)
 	_,err = db.Exec("CREATE TABLE IF NOT EXISTS nsec3 ( id SERIAL PRIMARY KEY, run_id integer REFERENCES runs(id), domain_id integer REFERENCES domain(id), hashed_name varchar(253),  next_hashed_name varchar(253), iterations integer, hash_algorithm integer, salt varchar(255), rrsig_ok bool, match bool, cover bool, coverwc bool, n3wc bool, key_found bool, verified bool, expired bool)")
 	if err != nil {
 		fmt.Println("OpenConnections",db.Stats())
 		panic(err)
 	}
 
-	DropTable("ds", db)
+	DropTable("ds", db, drop)
 
 	_, err = db.Exec("CREATE TABLE IF NOT EXISTS ds ( id SERIAL PRIMARY KEY, run_id integer REFERENCES runs(id), domain_id integer REFERENCES domain(id), algorithm int, hashed_name varchar(253) , key_tag integer, digest_type integer, digest varchar(255), ds_ok bool)")
 	if err != nil {
@@ -77,8 +73,8 @@ func CreateTables(db *sql.DB){
 	}
 
 }
-func DropTable(table string, db *sql.DB) {
-	if (Drop) {
+func DropTable(table string, db *sql.DB, drop bool) {
+	if (drop) {
 		_, err := db.Exec("DROP TABLE IF EXISTS " + table + " CASCADE")
 		if err != nil {
 			fmt.Println("OpenConnections", db.Stats())
@@ -86,6 +82,8 @@ func DropTable(table string, db *sql.DB) {
 		}
 	}
 }
+
+
 func NewRun(db *sql.DB)(int){
 	var run_id int;
 	err := db.QueryRow("INSERT INTO runs(tstmp) VALUES($1) RETURNING id", time.Now()).Scan(&run_id)

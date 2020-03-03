@@ -20,23 +20,33 @@ var concurrency int = 100;
 var dontProbeListFile string;
 var dontProbeList []*net.IPNet;
 
-var TotalTime int
+var TotalTime int;
 
 
-var debug = false
+var debug = false;
 var err error;
 var geoip_country_db *geoip2.Reader;
 var geoip_asn_db *geoip2.Reader;
 
+//var database;
 
-func InitCollect(dplf string , drop bool){
+func InitCollect(dplf string , drop bool, user string, password string, dbname string){
 	//check Dont probelist file
 	dontProbeList = InitializeDontProbeList(dplf)
 	//Init geoip
 	geoip_country_db, geoip_asn_db = geoIPUtils.InitGeoIP()
 
 	//Drop database if indicated
-	dbController.Drop=drop
+	
+
+	//initialize database (create tables if not created already)
+	database, err := sql.Open("postgres", "user="+user+" password="+password+" dbname="+dbname+" sslmode=disable")
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	dbController.CreateTables(database, drop)
+	database.Close()
 
 }
 
@@ -69,38 +79,32 @@ func InitializeDontProbeList(dpf string)(dontProbeList  []*net.IPNet ){
 
 func Collect(input string, c int, max_c int, max_retry int, dbname string, user string, password string, debug bool) {
 	
-	var retry int = 0 //initial retry
-	
-	
-	db, err := sql.Open("postgres", "user="+user+" password="+password+" dbname="+dbname+" sslmode=disable")
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-	dbController.CreateTables(db)
-	db.Close()
-	for c <= max_c{
-		for retry < max_retry {
+	var current_retry_attempt int = 0 //initial retry
 
-			db, err := sql.Open("postgres", "user="+user+" password="+password+" dbname="+dbname+" sslmode=disable")
+
+	
+	for c <= max_c{
+		for current_retry_attempt < max_retry {
+
+			database, err := sql.Open("postgres", "user="+user+" password="+password+" dbname="+dbname+" sslmode=disable")
 			if err != nil {
 				fmt.Println(err)
 				return
 			}
 
-			fmt.Println("EXECUTING WITH ", c , " GOROUTINES; retry: ",retry)
+			fmt.Println("EXECUTING WITH ", c , " GOROUTINES; retry: ",current_retry_attempt)
 			/*Initialize*/
 			SetConfigurations(c)
-			run_id := dbController.NewRun(db)
+			run_id := dbController.NewRun(database)
 
 			/*Collect data*/
-			CollectData(db, input, run_id, debug)
+			CollectData(database, input, run_id, debug)
 			fmt.Println("TotalTime(nsec):", TotalTime ," (sec) ", TotalTime/1000000000," (min:sec) ", TotalTime/60000000000,":",TotalTime%60000000000/1000000000)
-			db.Close()
-			retry ++
+			database.Close()
+			current_retry_attempt ++
 		}
 		c++
-		retry=0
+		current_retry_attempt=0
 	}
 
 
