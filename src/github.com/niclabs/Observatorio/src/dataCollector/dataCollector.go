@@ -166,7 +166,7 @@ func collectDomainInfo(domain_name string, run_id int, db *sql.DB) {
 	/*create domain*/
 	domain_id = dbController.SaveDomain(domain_name, run_id, db)
 	/*Obtener NS del dominio*/
-	var domain_name_server string;
+	var domain_name_servers string;
 	{
 		/*Obtener NS del dominio*/
 		nss, _, err := dnsUtils.GetRecordSet(domain_name, dns.TypeNS, config_servers,c)
@@ -225,7 +225,7 @@ func collectDomainInfo(domain_name string, run_id int, db *sql.DB) {
 										continue NameServer
 									}
 									dontProbe= false
-									server = ips;
+									domain_name_servers = ips;
 									dbController.SaveNSIP(nameserverid, ips, country, asn, dontProbe, run_id, db)
 								}
 							}
@@ -244,7 +244,7 @@ func collectDomainInfo(domain_name string, run_id int, db *sql.DB) {
 							}
 						}
 
-						if (len(server)!=0) {
+						if (len(domain_name_servers)!=0) {
 							recursivity := false
 							EDNS := false
 							loc_query := false
@@ -327,12 +327,12 @@ func collectDomainInfo(domain_name string, run_id int, db *sql.DB) {
 	//checkServer
 
 
-	if (len(server)!=0) {
+	if (len(domain_name_servers)!=0) {
 		//Get A and AAAA records
 		{
 			//Get A and AAAA records
 
-			ipv4, err := dnsUtils.GetARecords(domain_name, []string{server},c)
+			ipv4, err := dnsUtils.GetARecords(domain_name, []string{domain_name_servers},c)
 
 			if (err != nil) {
 				manageError(strings.Join([]string{"get a record", domain_name, err.Error()}, ""))
@@ -343,7 +343,7 @@ func collectDomainInfo(domain_name string, run_id int, db *sql.DB) {
 				}
 			}
 
-			ipv6, err := dnsUtils.GetAAAARecords(domain_name, []string{server},c)
+			ipv6, err := dnsUtils.GetAAAARecords(domain_name, []string{domain_name_servers},c)
 			if (err != nil) {
 
 				manageError(strings.Join([]string{"get AAAA record", domain_name, err.Error()}, ""))
@@ -359,7 +359,7 @@ func collectDomainInfo(domain_name string, run_id int, db *sql.DB) {
 		{
 			/*check soa*/
 			SOA := false
-			soa, err := dnsUtils.CheckSOA(domain_name, []string{server},c)
+			soa, err := dnsUtils.CheckSOA(domain_name, []string{domain_name_servers},c)
 			if (err != nil) {
 				manageError(strings.Join([]string{"check soa", domain_name, err.Error()}, ""))
 
@@ -454,7 +454,7 @@ func collectDomainInfo(domain_name string, run_id int, db *sql.DB) {
 
 
 
-			dnskeys_domain_name, _, err := dnsUtils.GetRecordSetWithDNSSEC(domain_name, dns.TypeDNSKEY, server,c)
+			dnskeys_domain_name, _, err := dnsUtils.GetRecordSetWithDNSSEC(domain_name, dns.TypeDNSKEY, domain_name_servers,c)
 			if (err != nil) {
 				manageError(strings.Join([]string{"dnskey", domain_name, err.Error()}, ""))
 			} else {
@@ -528,7 +528,7 @@ func collectDomainInfo(domain_name string, run_id int, db *sql.DB) {
 						d := domain_name
 						domain_name := "zskldhoisdh123dnakjdshaksdjasmdnaksjdh" + "." + d
 						t := dns.TypeA
-						in, _, err := dnsUtils.GetRecordSetWithDNSSEC(domain_name, t, server,c)
+						in, _, err := dnsUtils.GetRecordSetWithDNSSEC(domain_name, t, domain_name_servers,c)
 						if (err != nil) {
 							fmt.Println(err.Error())
 							manageError(strings.Join([]string{"nsec/3", domain_name, err.Error()}, ""))
