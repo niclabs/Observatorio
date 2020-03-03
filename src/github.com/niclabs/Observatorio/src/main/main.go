@@ -12,7 +12,7 @@ type Config struct {
         Input_filepath string `yaml:"inputfilepath"`
         Dontprobe_filepath string `yaml:"dontprobefilepath"`
         Concurrency int `yaml:"concurrency"`
-        Max_retry int `yaml:"maxretry"`
+        //Max_retry int `yaml:"maxretry"`
         Drop_database bool `yaml:"dropdatabase"`
         Debug bool `yaml:"debug"`
     } `yaml:"runargs"`
@@ -47,6 +47,6 @@ func main(){
 	
 
 	dataCollector.InitCollect(cfg.RunArguments.Dontprobe_filepath, cfg.RunArguments.Drop_database, cfg.Database.Username, cfg.Database.Password, cfg.Database.Database_name)
-	dataCollector.Collect(cfg.RunArguments.Input_filepath, cfg.RunArguments.Concurrency, cfg.RunArguments.Max_retry, cfg.Database.Database_name, cfg.Database.Username, cfg.Database.Password, cfg.RunArguments.Debug)
+	dataCollector.Collect(cfg.RunArguments.Input_filepath, cfg.RunArguments.Concurrency, cfg.Database.Database_name, cfg.Database.Username, cfg.Database.Password, cfg.RunArguments.Debug)
 }
 

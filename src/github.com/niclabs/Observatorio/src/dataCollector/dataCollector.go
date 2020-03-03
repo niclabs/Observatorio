@@ -77,31 +77,25 @@ func InitializeDontProbeList(dpf string)(dontProbeList  []*net.IPNet ){
 }
 
 
-func Collect(input string, c int, max_retry int, dbname string, user string, password string, debug bool) {
+func Collect(input string, c int, dbname string, user string, password string, debug bool) {
 	
-	var current_retry_attempt int = 0 //initial retry
 
-
-
-	for current_retry_attempt < max_retry {
-
-		database, err := sql.Open("postgres", "user="+user+" password="+password+" dbname="+dbname+" sslmode=disable")
-		if err != nil {
-			fmt.Println(err)
-			return
-		}
-
-		fmt.Println("EXECUTING WITH ", c , " GOROUTINES; retry: ",current_retry_attempt)
-		/*Initialize*/
-		SetConfigurations(c)
-		run_id := dbController.NewRun(database)
-
-		/*Collect data*/
-		CollectData(database, input, run_id, debug)
-		fmt.Println("TotalTime(nsec):", TotalTime ," (sec) ", TotalTime/1000000000," (min:sec) ", TotalTime/60000000000,":",TotalTime%60000000000/1000000000)
-		database.Close()
-		current_retry_attempt ++
+	database, err := sql.Open("postgres", "user="+user+" password="+password+" dbname="+dbname+" sslmode=disable")
+	if err != nil {
+		fmt.Println(err)
+		return
 	}
+
+	fmt.Println("EXECUTING WITH ", c , " GOROUTINES;")
+	/*Initialize*/
+	SetConfigurations(c)
+	run_id := dbController.NewRun(database)
+
+	/*Collect data*/
+	CollectData(database, input, run_id, debug)
+	fmt.Println("TotalTime(nsec):", TotalTime ," (sec) ", TotalTime/1000000000," (min:sec) ", TotalTime/60000000000,":",TotalTime%60000000000/1000000000)
+	database.Close()
+	
 
 
 
