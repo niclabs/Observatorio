@@ -28,7 +28,9 @@ var err error;
 var geoip_country_db *geoip2.Reader;
 var geoip_asn_db *geoip2.Reader;
 
-//var database;
+
+var config_servers []string ;
+
 
 func InitCollect(dplf string , drop bool, user string, password string, dbname string){
 	//check Dont probelist file
@@ -47,6 +49,15 @@ func InitCollect(dplf string , drop bool, user string, password string, dbname s
 	}
 	dbController.CreateTables(database, drop)
 	database.Close()
+
+	//set maximum number of cpus
+	runtime.GOMAXPROCS(runtime.NumCPU())
+	fmt.Println("num CPU:",runtime.NumCPU())
+	
+	//obtain config default dns servers
+	config, _ := dns.ClientConfigFromFile("/etc/resolv.conf")
+	config_servers = config.Servers 
+
 
 }
 
@@ -105,9 +116,7 @@ func collect(db *sql.DB, inputFile string, run_id int){
 		return
 	}
 
-	config, _ := dns.ClientConfigFromFile("/etc/resolv.conf")
-	runtime.GOMAXPROCS(runtime.NumCPU())
-	fmt.Println("num CPU:",runtime.NumCPU())
+
 	
 	TotalTime = 0
 	getDataQueue := make(chan string, concurrency)
@@ -117,9 +126,9 @@ func collect(db *sql.DB, inputFile string, run_id int){
 	for i := 0; i < concurrency; i++ {
 		go func(run_id int) {
 			j:=0
-			for line := range getDataQueue {
+			for domain_name := range getDataQueue {
 				//t2:=time.Now()
-				getDomainInfo(line, run_id, config, db)
+				getDomainInfo(domain_name, run_id, db)
 				//duration := time.Since(t2)
 			
 				j++
@@ -146,7 +155,7 @@ func manageError(err string){
 		fmt.Println(err)
 	}
 }
-func getDomainInfo(line string, run_id int, config *dns.ClientConfig, db *sql.DB) {
+func getDomainInfo(line string, run_id int, db *sql.DB) {
 	c:=new(dns.Client)
 	var domainid int
 	/*create domain*/
@@ -155,7 +164,7 @@ func getDomainInfo(line string, run_id int, config *dns.ClientConfig, db *sql.DB
 	var server string;
 	{
 		/*Obtener NS del dominio*/
-		nss, _, err := dnsUtils.GetRecordSet(line, dns.TypeNS, config.Servers,c)
+		nss, _, err := dnsUtils.GetRecordSet(line, dns.TypeNS, config_servers,c)
 		if (err != nil) {
 			if(nss!=nil){
 				fmt.Println("error but answer",nss.String())
@@ -193,7 +202,7 @@ func getDomainInfo(line string, run_id int, config *dns.ClientConfig, db *sql.DB
 						{
 							/*get A and AAAA*/
 							//getANSRecord:
-							ipv4, err := dnsUtils.GetARecords(ns.Ns, config.Servers,c)
+							ipv4, err := dnsUtils.GetARecords(ns.Ns, config_servers,c)
 							if (err != nil) {
 
 								manageError(strings.Join([]string{"getANS", line, ns.Ns, err.Error()}, ""))
@@ -216,7 +225,7 @@ func getDomainInfo(line string, run_id int, config *dns.ClientConfig, db *sql.DB
 								}
 							}
 							//getAAAANSRecord:
-							ipv6, err := dnsUtils.GetAAAARecords(ns.Ns, config.Servers,c)
+							ipv6, err := dnsUtils.GetAAAARecords(ns.Ns, config_servers,c)
 							if (err != nil) {
 
 								manageError(strings.Join([]string{"getAAAANS", line, ns.Ns, err.Error()}, ""))
@@ -370,7 +379,7 @@ func getDomainInfo(line string, run_id int, config *dns.ClientConfig, db *sql.DB
 			/*check DNSSEC*/
 
 			/*ds*/
-			dss, _, err := dnsUtils.GetRecordSet(line, dns.TypeDS, config.Servers,c)
+			dss, _, err := dnsUtils.GetRecordSet(line, dns.TypeDS, config_servers,c)
 			if (err != nil) {
 				//manageError(strings.Join([]string{"DS record", line, err.Error()}, ""))
 			} else {
@@ -390,7 +399,7 @@ func getDomainInfo(line string, run_id int, config *dns.ClientConfig, db *sql.DB
 					}
 				}
 				if(ds_found) {
-					rrsigs, _, err := dnsUtils.GetRecordSetWithDNSSEC(line, dns.TypeDS, config.Servers[0], c)
+					rrsigs, _, err := dnsUtils.GetRecordSetWithDNSSEC(line, dns.TypeDS, config_servers[0], c)
 					if (err != nil) {
 						//manageError(strings.Join([]string{"DS record", line, err.Error()}, ""))
 					} else {
@@ -409,7 +418,7 @@ func getDomainInfo(line string, run_id int, config *dns.ClientConfig, db *sql.DB
 									expired = true
 								}
 								//---------------DNSKEY----------------------------
-								dnskeys, _, _ = dnsUtils.GetRecordSetWithDNSSEC(rrsig.SignerName, dns.TypeDNSKEY, config.Servers[0], c)
+								dnskeys, _, _ = dnsUtils.GetRecordSetWithDNSSEC(rrsig.SignerName, dns.TypeDNSKEY, config_servers[0], c)
 								if (dnskeys != nil && dnskeys.Answer != nil) {
 									key := dnsUtils.FindKey(dnskeys, rrsig)
 									if (key != nil) {
@@ -484,7 +493,7 @@ func getDomainInfo(line string, run_id int, config *dns.ClientConfig, db *sql.DB
 								expired = true
 							}
 							//---------------DNSKEY----------------------------
-							dnskeys, _, _ = dnsUtils.GetRecordSetWithDNSSEC(rrsig1.SignerName, dns.TypeDNSKEY, config.Servers[0], c)
+							dnskeys, _, _ = dnsUtils.GetRecordSetWithDNSSEC(rrsig1.SignerName, dns.TypeDNSKEY, config_servers[0], c)
 							if (dnskeys != nil && dnskeys.Answer != nil) {
 								key := dnsUtils.FindKey(dnskeys, rrsig1)
 								if (key != nil) {
@@ -563,7 +572,7 @@ func getDomainInfo(line string, run_id int, config *dns.ClientConfig, db *sql.DB
 											}
 											//---------------DNSKEY----------------------------
 											if (rrsig.SignerName != line) {
-												dnskeys, _, _ = dnsUtils.GetRecordSetWithDNSSEC(rrsig.SignerName, dns.TypeDNSKEY, config.Servers[0], c)
+												dnskeys, _, _ = dnsUtils.GetRecordSetWithDNSSEC(rrsig.SignerName, dns.TypeDNSKEY, config_servers[0], c)
 											} else {
 												dnskeys = dnskeys_line
 											}
@@ -627,7 +636,7 @@ func getDomainInfo(line string, run_id int, config *dns.ClientConfig, db *sql.DB
 											}
 											//---------------DNSKEY----------------------------
 											if (rrsig.SignerName != line) {
-												dnskeys, _, _ = dnsUtils.GetRecordSetWithDNSSEC(rrsig.SignerName, dns.TypeDNSKEY, config.Servers[0],c)
+												dnskeys, _, _ = dnsUtils.GetRecordSetWithDNSSEC(rrsig.SignerName, dns.TypeDNSKEY, config_servers[0],c)
 											} else {
 												dnskeys = dnskeys_line
 											}
