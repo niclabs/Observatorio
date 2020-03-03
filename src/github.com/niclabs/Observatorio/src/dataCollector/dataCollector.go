@@ -166,7 +166,7 @@ func collectDomainInfo(domain_name string, run_id int, db *sql.DB) {
 	/*create domain*/
 	domain_id = dbController.SaveDomain(domain_name, run_id, db)
 	/*Obtener NS del dominio*/
-	var server string;
+	var domain_name_server string;
 	{
 		/*Obtener NS del dominio*/
 		nss, _, err := dnsUtils.GetRecordSet(domain_name, dns.TypeNS, config_servers,c)
