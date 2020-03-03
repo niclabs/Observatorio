@@ -26,10 +26,12 @@ type Config struct {
     } `yaml:"database"`
 }
 
+var CONFIG_FILE string = "config.yml"
+
 func main(){
 
 	//Read config 
-	f, err := os.Open("config.yml")
+	f, err := os.Open(CONFIG_FILE)
 	if err != nil {
 	    fmt.Printf(err.Error())
 	}
@@ -44,7 +46,8 @@ func main(){
 	fmt.Printf(cfg.RunArguments.Input_filepath)
 	fmt.Printf(string(cfg.RunArguments.Concurrency))
 	//input, dp, con, ccmax, max_retry, dropdatabase, db, u, pass, debug:=readArguments()
-	dataCollector.InitFilePerformanceResults()
+
+
 	dataCollector.Collect(cfg.RunArguments.Input_filepath, cfg.RunArguments.Dontprobe_filepath, cfg.RunArguments.Concurrency, cfg.RunArguments.Ccmax, cfg.RunArguments.Max_retry, cfg.RunArguments.Drop_database, cfg.Database.Database_name, cfg.Database.Username, cfg.Database.Password, cfg.RunArguments.Debug)
 }
 

@@ -3,7 +3,6 @@ import ("fmt"
 	"database/sql"
 	_ "github.com/lib/pq"
 	"github.com/miekg/dns"
-	"os"
 	"time"
 	"net"
 	"runtime"
@@ -12,9 +11,6 @@ import ("fmt"
 	"github.com/niclabs/Observatorio/src/dbController"
 	"github.com/oschwald/geoip2-golang"
 	"github.com/niclabs/Observatorio/src/dnsUtils"
-	
-	"strconv"
-	
 	"github.com/niclabs/Observatorio/src/geoIPUtils"
 	"github.com/niclabs/Observatorio/src/utils"
 )
@@ -33,39 +29,9 @@ var geoip_country_db *geoip2.Reader;
 var geoip_asn_db *geoip2.Reader;
 
 
-
-/*Performance Results file configuration*/
-var performanceResultsFolder string = "performanceResults"
-var fo *os.File
-func InitFilePerformanceResults(){
-	var err error;
-	f:= "2006-01-02T15:04:05" //format file name
-	ts := time.Now().Format(f)
-
-	if _, err := os.Stat(performanceResultsFolder); os.IsNotExist(err) {
-		os.Mkdir(performanceResultsFolder, os.ModePerm)
-	}
-
-
-	fo, err = os.Create(performanceResultsFolder+"/output:"+ts+".txt")
-	if err != nil {
-		fmt.Println(err.Error())
-	}
-	// close fo on exit and check for its returned error
-}
-func writeToFilePerformanceResults(s string){
-
-	if _, err := fo.WriteString(s+"\n"); err != nil {
-		fmt.Println("error escribiendo en output",err.Error())
-	}
-
-}
-func closeFilePerformanceResults(){
-	fo.Close()
-}
 func Collect(input string, dpf string, c int, max_c int, max_retry int, drop bool, dbname string, user string, password string, debug bool) {
 
-	writeToFilePerformanceResults("runid, goroutines, retry, totalTime")
+	
 	var retry int = 0 //initial retry
 	dbController.Drop=drop
 	InitializeDontProbeList(dpf)
@@ -94,17 +60,12 @@ func Collect(input string, dpf string, c int, max_c int, max_retry int, drop boo
 
 			tt:=TotalTime
 			fmt.Println("TotalTime(nsec):", tt ," (sec) ", tt/1000000000," (min:sec) ", tt/60000000000,":",tt%60000000000/1000000000)
-
-			var line string;
-			line = string(strconv.Itoa(run_id) + ", "+ strconv.Itoa(c) + ", " + strconv.Itoa(retry)+ ", " + strconv.Itoa(tt))
-			writeToFilePerformanceResults(line)
 			db.Close()
 			retry ++
 		}
 		c++
 		retry=0
 	}
-	closeFilePerformanceResults()
 
 
 }
