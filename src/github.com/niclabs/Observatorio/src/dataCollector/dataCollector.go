@@ -29,48 +29,19 @@ var geoip_country_db *geoip2.Reader;
 var geoip_asn_db *geoip2.Reader;
 
 
-func Collect(input string, dpf string, c int, max_c int, max_retry int, drop bool, dbname string, user string, password string, debug bool) {
+func InitCollect(dplf string , drop bool){
+	//check Dont probelist file
+	dontProbeList = InitializeDontProbeList(dplf)
+	//Init geoip
+	geoip_country_db, geoip_asn_db = geoIPUtils.InitGeoIP()
 
-	
-	var retry int = 0 //initial retry
+	//Drop database if indicated
 	dbController.Drop=drop
-	InitializeDontProbeList(dpf)
-	db, err := sql.Open("postgres", "user="+user+" password="+password+" dbname="+dbname+" sslmode=disable")
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-	dbController.CreateTables(db)
-	db.Close()
-	for c <= max_c{
-		for retry < max_retry {
-
-			db, err := sql.Open("postgres", "user="+user+" password="+password+" dbname="+dbname+" sslmode=disable")
-			if err != nil {
-				fmt.Println(err)
-				return
-			}
-			fmt.Println("EXECUTING WITH ",c, " GOROUTINES; retry: ",retry)
-			/*Initialize*/
-			geoip_country_db, geoip_asn_db = geoIPUtils.InitGeoIP()
-			SetConfigurations(c)
-			run_id := dbController.NewRun(db)
-			/*Collect data*/
-			CollectData(db, input, dpf, run_id, debug)
-
-			tt:=TotalTime
-			fmt.Println("TotalTime(nsec):", tt ," (sec) ", tt/1000000000," (min:sec) ", tt/60000000000,":",tt%60000000000/1000000000)
-			db.Close()
-			retry ++
-		}
-		c++
-		retry=0
-	}
-
 
 }
-func InitializeDontProbeList(dpf string){
-	dontProbeListFile = dpf
+
+func InitializeDontProbeList(dpf string)(dontProbeList  []*net.IPNet ){
+	dontProbeListFile := dpf
 	if(len(dontProbeListFile)==0) {
 		fmt.Println("no dont Pobe list file found")
 		return
@@ -92,14 +63,54 @@ func InitializeDontProbeList(dpf string){
 		}
 		dontProbeList=append(dontProbeList,ipNet)
 	}
+	return dontProbeList
+}
+
+
+func Collect(input string, c int, max_c int, max_retry int, dbname string, user string, password string, debug bool) {
+	
+	var retry int = 0 //initial retry
+	
+	
+	db, err := sql.Open("postgres", "user="+user+" password="+password+" dbname="+dbname+" sslmode=disable")
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	dbController.CreateTables(db)
+	db.Close()
+	for c <= max_c{
+		for retry < max_retry {
+
+			db, err := sql.Open("postgres", "user="+user+" password="+password+" dbname="+dbname+" sslmode=disable")
+			if err != nil {
+				fmt.Println(err)
+				return
+			}
+
+			fmt.Println("EXECUTING WITH ", c , " GOROUTINES; retry: ",retry)
+			/*Initialize*/
+			SetConfigurations(c)
+			run_id := dbController.NewRun(db)
+
+			/*Collect data*/
+			CollectData(db, input, run_id, debug)
+			fmt.Println("TotalTime(nsec):", TotalTime ," (sec) ", TotalTime/1000000000," (min:sec) ", TotalTime/60000000000,":",TotalTime%60000000000/1000000000)
+			db.Close()
+			retry ++
+		}
+		c++
+		retry=0
+	}
+
+
 }
 func SetConfigurations(c int){
 	concurrency = c
 }
 
-func CollectData(db *sql.DB, inputFile string, dpf string, run_id int, d bool ){
+func CollectData(db *sql.DB, inputFile string, run_id int, d bool ){
 	debug=d
-	dontProbeListFile=dpf
 	t:=time.Now()
 	lines, err := utils.ReadLines(inputFile)
 	if(err!=nil){

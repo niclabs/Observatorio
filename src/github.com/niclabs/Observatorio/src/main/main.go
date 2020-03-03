@@ -47,9 +47,14 @@ func main(){
 	fmt.Printf(string(cfg.RunArguments.Concurrency))
 	//input, dp, con, ccmax, max_retry, dropdatabase, db, u, pass, debug:=readArguments()
 
+	
 
-	dataCollector.Collect(cfg.RunArguments.Input_filepath, cfg.RunArguments.Dontprobe_filepath, cfg.RunArguments.Concurrency, cfg.RunArguments.Ccmax, cfg.RunArguments.Max_retry, cfg.RunArguments.Drop_database, cfg.Database.Database_name, cfg.Database.Username, cfg.Database.Password, cfg.RunArguments.Debug)
+	dataCollector.InitCollect(cfg.RunArguments.Dontprobe_filepath, cfg.RunArguments.Drop_database)
+	dataCollector.Collect(cfg.RunArguments.Input_filepath, cfg.RunArguments.Concurrency, cfg.RunArguments.Ccmax, cfg.RunArguments.Max_retry, cfg.Database.Database_name, cfg.Database.Username, cfg.Database.Password, cfg.RunArguments.Debug)
 }
+
+
+
 
 /*inizialize arguments*/
 func readArguments()(input *string, dp *string, con *int, ccmax int, max_retry *int, dropdatabase *bool, db *string, u *string, pass string, debug *bool){
