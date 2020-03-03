@@ -20,7 +20,7 @@ var concurrency int = 100;
 var dontProbeListFile string;
 var dontProbeList []*net.IPNet;
 
-var TotalTime int;
+var total_time int = 0;
 
 
 var debug = false;
@@ -35,13 +35,11 @@ var config_servers []string ;
 func InitCollect(dplf string , drop bool, user string, password string, dbname string){
 	//check Dont probelist file
 	dontProbeList = InitializeDontProbeList(dplf)
+
 	//Init geoip
-	geoip_country_db, geoip_asn_db = geoIPUtils.InitGeoIP()
+	geoip_country_db, geoip_asn_db = geoIPUtils.InitGeoIP()	
 
-	//Drop database if indicated
-	
-
-	//initialize database (create tables if not created already)
+	//initialize database (create tables if not created already and drop database if indicated)
 	database, err := sql.Open("postgres", "user="+user+" password="+password+" dbname="+dbname+" sslmode=disable")
 	if err != nil {
 		fmt.Println(err)
@@ -67,20 +65,20 @@ func InitializeDontProbeList(dpf string)(dontProbeList  []*net.IPNet ){
 		fmt.Println("no dont Pobe list file found")
 		return
 	}
-	lines, err := utils.ReadLines(dontProbeListFile)
+	domain_names, err := utils.ReadLines(dontProbeListFile)
 	if(err!=nil){
 		fmt.Println(err.Error())
 
 	}
 	fmt.Println("don probe file ok")
-	for _,line:=range lines{
+	for _,domain_name:=range domain_names{
 
-		if(strings.Contains(line,"#") || len(line)==0){
+		if(strings.Contains(domain_name,"#") || len(domain_name)==0){
 			continue
 		}
-		_,ipNet, err :=net.ParseCIDR(line)
+		_,ipNet, err :=net.ParseCIDR(domain_name)
 		if(err!=nil){
-			fmt.Println("no CIDR in DontProbeList:",line)
+			fmt.Println("no CIDR in DontProbeList:",domain_name)
 		}
 		dontProbeList=append(dontProbeList,ipNet)
 	}
@@ -89,94 +87,101 @@ func InitializeDontProbeList(dpf string)(dontProbeList  []*net.IPNet ){
 
 
 func StartCollect(input string, c int, dbname string, user string, password string, debug_bool bool) {
+	
 	database, err := sql.Open("postgres", "user="+user+" password="+password+" dbname="+dbname+" sslmode=disable")
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
-
-	fmt.Println("EXECUTING WITH ", c , " GOROUTINES;")
 	/*Initialize*/
 	concurrency = c
 	run_id := dbController.NewRun(database)
 	debug = debug_bool
+	
 	/*Collect data*/
 	collect(database, input, run_id)
 
-	fmt.Println("TotalTime(nsec):", TotalTime ," (sec) ", TotalTime/1000000000," (min:sec) ", TotalTime/60000000000,":",TotalTime%60000000000/1000000000)
+	fmt.Println("TotalTime(nsec):", total_time ," (sec) ", total_time/1000000000," (min:sec) ", total_time/60000000000,":",total_time%60000000000/1000000000)
 
 	database.Close()
 }
 
 func collect(db *sql.DB, inputFile string, run_id int){
 	start_time:=time.Now()
+
+	fmt.Println("EXECUTING WITH ", concurrency , " GOROUTINES;")
+
 	domains_list, err := utils.ReadLines(inputFile)
 	if(err!=nil){
 		fmt.Println("Error reading domains list" + err.Error())
 		return
 	}
 
-
-	
-	TotalTime = 0
-	getDataQueue := make(chan string, concurrency)
+	domains_queue := make(chan string, concurrency)
 	wg := sync.WaitGroup{}
 	wg.Add(concurrency)
 	/*Init n routines to read the queue*/
 	for i := 0; i < concurrency; i++ {
 		go func(run_id int) {
 			j:=0
-			for domain_name := range getDataQueue {
+			for domain_name := range domains_queue {
 				//t2:=time.Now()
-				getDomainInfo(domain_name, run_id, db)
+				collectDomainInfo(domain_name, run_id, db)
 				//duration := time.Since(t2)
-			
 				j++
 			}
 			wg.Done()
 		}(run_id)
 	}
+
+
 	/*fill the queue with data to obtain*/
 	for _, domain_name := range domains_list {
 		domain_name := dns.Fqdn(domain_name)
-		getDataQueue <- domain_name
+		domains_queue <- domain_name
 	}
+
 	/*Close the queue*/
-	close(getDataQueue)
+	close(domains_queue)
+	
 	/*wait for routines to finish*/
 	wg.Wait()
-	TotalTime = (int)(time.Since(start_time).Nanoseconds())
-	dbController.SaveCorrectRun(run_id, TotalTime, true, db)
+	
+
+	total_time = (int)(time.Since(start_time).Nanoseconds())
+	dbController.SaveCorrectRun(run_id, total_time, true, db)
 	fmt.Println("Successful Run. run_id:", run_id)
 	db.Close()
 }
+
 func manageError(err string){
 	if(debug){
 		fmt.Println(err)
 	}
 }
-func getDomainInfo(line string, run_id int, db *sql.DB) {
+
+func collectDomainInfo(domain_name string, run_id int, db *sql.DB) {
 	c:=new(dns.Client)
-	var domainid int
+	var domain_id int
 	/*create domain*/
-	domainid = dbController.SaveDomain(line, run_id, db)
+	domain_id = dbController.SaveDomain(domain_name, run_id, db)
 	/*Obtener NS del dominio*/
 	var server string;
 	{
 		/*Obtener NS del dominio*/
-		nss, _, err := dnsUtils.GetRecordSet(line, dns.TypeNS, config_servers,c)
+		nss, _, err := dnsUtils.GetRecordSet(domain_name, dns.TypeNS, config_servers,c)
 		if (err != nil) {
 			if(nss!=nil){
 				fmt.Println("error but answer",nss.String())
 			}
-			manageError(strings.Join([]string{"get NS", line, err.Error()}, ""))
-			fmt.Println("Error asking for NS", line, err.Error())
+			manageError(strings.Join([]string{"get NS", domain_name, err.Error()}, ""))
+			fmt.Println("Error asking for NS", domain_name, err.Error())
 		} else {
 			if(len(nss.Answer)==0 || nss.Answer==nil){
 				if(nss.Answer==nil){
-					fmt.Println("no answer","no NS asociated to domain:", line, nss.Answer)
+					fmt.Println("no answer","no NS asociated to domain:", domain_name, nss.Answer)
 				} else{
-					fmt.Println("0 answer","no NS asociated to domain:", line, nss.Answer)
+					fmt.Println("0 answer","no NS asociated to domain:", domain_name, nss.Answer)
 
 					for _, ns := range nss.Answer {
 						fmt.Println(ns.String())
@@ -187,15 +192,15 @@ func getDomainInfo(line string, run_id int, db *sql.DB) {
 			for _, ns := range nss.Answer {
 				if ns, ok := ns.(*dns.NS); ok {
 					var nameserverid int
-					available, rtt, err := dnsUtils.CheckAvailability(line, ns,c)
+					available, rtt, err := dnsUtils.CheckAvailability(domain_name, ns,c)
 					if (err != nil) {
-						nameserverid = dbController.CreateNS(ns, domainid, run_id, db, false)
-						manageError(strings.Join([]string{"checkAvailability", line, ns.Ns, err.Error(), rtt.String()}, ""))
+						nameserverid = dbController.CreateNS(ns, domain_id, run_id, db, false)
+						manageError(strings.Join([]string{"checkAvailability", domain_name, ns.Ns, err.Error(), rtt.String()}, ""))
 					} else {
 						/*create ns*/
 						{
 							/*create ns*/
-							nameserverid = dbController.CreateNS(ns, domainid, run_id, db, available)
+							nameserverid = dbController.CreateNS(ns, domain_id, run_id, db, available)
 						}
 
 						/*get A and AAAA*/
@@ -205,7 +210,7 @@ func getDomainInfo(line string, run_id int, db *sql.DB) {
 							ipv4, err := dnsUtils.GetARecords(ns.Ns, config_servers,c)
 							if (err != nil) {
 
-								manageError(strings.Join([]string{"getANS", line, ns.Ns, err.Error()}, ""))
+								manageError(strings.Join([]string{"getANS", domain_name, ns.Ns, err.Error()}, ""))
 							} else {
 
 								for _, ip := range ipv4 {
@@ -214,7 +219,7 @@ func getDomainInfo(line string, run_id int, db *sql.DB) {
 									asn := geoIPUtils.GetIPASN(ips, geoip_asn_db)
 									country := geoIPUtils.GetIPCountry(ips, geoip_country_db)
 									if (isIPInDontProbeList(ip)) {
-										fmt.Println("domain ", line, "in DontProbeList", ip)
+										fmt.Println("domain ", domain_name, "in DontProbeList", ip)
 										//TODO Future: save DONTPROBELIST in nameserver? and Domain?
 										dbController.SaveNSIP(nameserverid, ips, country, asn, dontProbe, run_id, db)
 										continue NameServer
@@ -228,7 +233,7 @@ func getDomainInfo(line string, run_id int, db *sql.DB) {
 							ipv6, err := dnsUtils.GetAAAARecords(ns.Ns, config_servers,c)
 							if (err != nil) {
 
-								manageError(strings.Join([]string{"getAAAANS", line, ns.Ns, err.Error()}, ""))
+								manageError(strings.Join([]string{"getAAAANS", domain_name, ns.Ns, err.Error()}, ""))
 							} else {
 								for _, ip := range ipv6 {
 									ips := net.IP.String(ip)
@@ -249,9 +254,9 @@ func getDomainInfo(line string, run_id int, db *sql.DB) {
 								//edns, recursivity, tcp, zone_transfer, loc_query
 								//------------------------------Recursividad y EDNS----------------------
 								RecAndEDNS := new(dns.Msg)
-								RecAndEDNS, rtt, err = dnsUtils.GetRecursivityAndEDNS(line, ns.Ns, "53",c)
+								RecAndEDNS, rtt, err = dnsUtils.GetRecursivityAndEDNS(domain_name, ns.Ns, "53",c)
 								if (err != nil) {
-									manageError(strings.Join([]string{"Rec and EDNS", line, ns.Ns, err.Error(), rtt.String()}, ""))
+									manageError(strings.Join([]string{"Rec and EDNS", domain_name, ns.Ns, err.Error(), rtt.String()}, ""))
 								} else {
 									if (RecAndEDNS.RecursionAvailable) {
 										recursivity = true
@@ -265,10 +270,10 @@ func getDomainInfo(line string, run_id int, db *sql.DB) {
 
 								//TCP---------------------
 								c.Net="tcp"
-								tcp, _, err := dnsUtils.GetRecordSetTCP(line, dns.TypeSOA, []string{ns.Ns},c)
+								tcp, _, err := dnsUtils.GetRecordSetTCP(domain_name, dns.TypeSOA, []string{ns.Ns},c)
 								c.Net="udp"
 								if (err != nil) {
-									//manageError(strings.Join([]string{"TCP", line, ns.Ns, err.Error()},""))
+									//manageError(strings.Join([]string{"TCP", domain_name, ns.Ns, err.Error()},""))
 								} else {
 									for _, tcpa := range tcp.Answer {
 										if (tcpa != nil) {
@@ -279,9 +284,9 @@ func getDomainInfo(line string, run_id int, db *sql.DB) {
 								}
 
 								//Zone transfer---------------------
-								zt, err := dnsUtils.ZoneTransfer(line, ns.Ns)
+								zt, err := dnsUtils.ZoneTransfer(domain_name, ns.Ns)
 								if (err != nil) {
-									manageError(strings.Join([]string{"zoneTransfer", line, ns.Ns, err.Error()}, ""))
+									manageError(strings.Join([]string{"zoneTransfer", domain_name, ns.Ns, err.Error()}, ""))
 								} else {
 									val := <-zt
 									if val != nil {
@@ -297,9 +302,9 @@ func getDomainInfo(line string, run_id int, db *sql.DB) {
 
 
 								//Wrong Queries (tipos extraños como loc)
-								loc, _, err := dnsUtils.GetRecordSet(line, dns.TypeLOC, []string{ns.Ns},c)
+								loc, _, err := dnsUtils.GetRecordSet(domain_name, dns.TypeLOC, []string{ns.Ns},c)
 								if (err != nil) {
-									manageError(strings.Join([]string{"locQuery", line, ns.Ns, err.Error()}, ""))
+									manageError(strings.Join([]string{"locQuery", domain_name, ns.Ns, err.Error()}, ""))
 								} else {
 									for _, loca := range loc.Answer {
 										if _, ok := loca.(*dns.LOC); ok {
@@ -327,25 +332,25 @@ func getDomainInfo(line string, run_id int, db *sql.DB) {
 		{
 			//Get A and AAAA records
 
-			ipv4, err := dnsUtils.GetARecords(line, []string{server},c)
+			ipv4, err := dnsUtils.GetARecords(domain_name, []string{server},c)
 
 			if (err != nil) {
-				manageError(strings.Join([]string{"get a record", line, err.Error()}, ""))
+				manageError(strings.Join([]string{"get a record", domain_name, err.Error()}, ""))
 			} else {
 				for _, ip := range ipv4 {
 					ips := net.IP.String(ip)
-					dbController.SaveDomainIp(ips, domainid, run_id, db)
+					dbController.SaveDomainIp(ips, domain_id, run_id, db)
 				}
 			}
 
-			ipv6, err := dnsUtils.GetAAAARecords(line, []string{server},c)
+			ipv6, err := dnsUtils.GetAAAARecords(domain_name, []string{server},c)
 			if (err != nil) {
 
-				manageError(strings.Join([]string{"get AAAA record", line, err.Error()}, ""))
+				manageError(strings.Join([]string{"get AAAA record", domain_name, err.Error()}, ""))
 			} else {
 				for _, ip := range ipv6 {
 					ips := net.IP.String(ip)
-					dbController.SaveDomainIp(ips, domainid, run_id, db)
+					dbController.SaveDomainIp(ips, domain_id, run_id, db)
 				}
 			}
 		}
@@ -354,9 +359,9 @@ func getDomainInfo(line string, run_id int, db *sql.DB) {
 		{
 			/*check soa*/
 			SOA := false
-			soa, err := dnsUtils.CheckSOA(line, []string{server},c)
+			soa, err := dnsUtils.CheckSOA(domain_name, []string{server},c)
 			if (err != nil) {
-				manageError(strings.Join([]string{"check soa", line, err.Error()}, ""))
+				manageError(strings.Join([]string{"check soa", domain_name, err.Error()}, ""))
 
 			} else {
 
@@ -366,7 +371,7 @@ func getDomainInfo(line string, run_id int, db *sql.DB) {
 					}
 				}
 			}
-			dbController.SaveSoa(SOA, domainid, db)
+			dbController.SaveSoa(SOA, domain_id, db)
 
 		}
 
@@ -379,9 +384,9 @@ func getDomainInfo(line string, run_id int, db *sql.DB) {
 			/*check DNSSEC*/
 
 			/*ds*/
-			dss, _, err := dnsUtils.GetRecordSet(line, dns.TypeDS, config_servers,c)
+			dss, _, err := dnsUtils.GetRecordSet(domain_name, dns.TypeDS, config_servers,c)
 			if (err != nil) {
-				//manageError(strings.Join([]string{"DS record", line, err.Error()}, ""))
+				//manageError(strings.Join([]string{"DS record", domain_name, err.Error()}, ""))
 			} else {
 				ds_ok := false
 				ds_found := false
@@ -395,17 +400,17 @@ func getDomainInfo(line string, run_id int, db *sql.DB) {
 						var keyTag int = int(ds1.KeyTag)
 						var digestType int = int(ds1.DigestType)
 						digest := ds1.Digest
-						dbController.SaveDS(domainid, algorithm, keyTag, digestType, digest, run_id, db)
+						dbController.SaveDS(domain_id, algorithm, keyTag, digestType, digest, run_id, db)
 					}
 				}
 				if(ds_found) {
-					rrsigs, _, err := dnsUtils.GetRecordSetWithDNSSEC(line, dns.TypeDS, config_servers[0], c)
+					rrsigs, _, err := dnsUtils.GetRecordSetWithDNSSEC(domain_name, dns.TypeDS, config_servers[0], c)
 					if (err != nil) {
-						//manageError(strings.Join([]string{"DS record", line, err.Error()}, ""))
+						//manageError(strings.Join([]string{"DS record", domain_name, err.Error()}, ""))
 					} else {
 						for _, ds := range rrsigs.Answer {
 							if rrsig, ok := ds.(*dns.RRSIG); ok {
-								dbController.SaveRRSIG(rrsig, domainid, run_id, db)
+								dbController.SaveRRSIG(rrsig, domain_id, run_id, db)
 								expired := false
 								key_found := false
 								verified := false
@@ -441,7 +446,7 @@ func getDomainInfo(line string, run_id int, db *sql.DB) {
 						}
 					}
 				}
-				dbController.UpdateDomainDSInfo(domainid, ds_found, ds_ok, db)
+				dbController.UpdateDomainDSInfo(domain_id, ds_found, ds_ok, db)
 			}
 
 
@@ -449,16 +454,16 @@ func getDomainInfo(line string, run_id int, db *sql.DB) {
 
 
 
-			dnskeys_line, _, err := dnsUtils.GetRecordSetWithDNSSEC(line, dns.TypeDNSKEY, server,c)
+			dnskeys_domain_name, _, err := dnsUtils.GetRecordSetWithDNSSEC(domain_name, dns.TypeDNSKEY, server,c)
 			if (err != nil) {
-				manageError(strings.Join([]string{"dnskey", line, err.Error()}, ""))
+				manageError(strings.Join([]string{"dnskey", domain_name, err.Error()}, ""))
 			} else {
-				if (len(dnskeys_line.Answer) != 0) {
+				if (len(dnskeys_domain_name.Answer) != 0) {
 					dnskey_found := false
 					dnskey_ok := false
 					var dnskey_rrset []dns.RR
 					/*si no tiene dnskey no busco nada de dnssec*/
-					for _, dnskey := range dnskeys_line.Answer {
+					for _, dnskey := range dnskeys_domain_name.Answer {
 						if dnskey1, ok := dnskey.(*dns.DNSKEY); ok {
 							dnskey_found = true
 							dnskey_rrset = append(dnskey_rrset,dnskey1)
@@ -474,16 +479,16 @@ func getDomainInfo(line string, run_id int, db *sql.DB) {
 									}
 								}
 							}
-							dbController.SaveDNSKEY(dnskey1, DSok, domainid, run_id, db)
+							dbController.SaveDNSKEY(dnskey1, DSok, domain_id, run_id, db)
 						}
 					}
-					rrsigs := dnskeys_line
+					rrsigs := dnskeys_domain_name
 					for _, rrsig := range rrsigs.Answer {
 						if rrsig1, ok := rrsig.(*dns.RRSIG); ok {
 							if(rrsig1.TypeCovered!=dns.TypeDNSKEY){
 								continue
 							}
-							dbController.SaveRRSIG(rrsig1, domainid, run_id, db)
+							dbController.SaveRRSIG(rrsig1, domain_id, run_id, db)
 							expired := false
 							key_found := false
 							verified := false
@@ -514,22 +519,22 @@ func getDomainInfo(line string, run_id int, db *sql.DB) {
 						}
 					}
 
-					dbController.UpdateDomainDNSKEYInfo(domainid, dnskey_found, dnskey_ok, db)
+					dbController.UpdateDomainDNSKEYInfo(domain_id, dnskey_found, dnskey_ok, db)
 
 
 
 					/*nsec/3*/
 					{
-						d := line
-						line := "zskldhoisdh123dnakjdshaksdjasmdnaksjdh" + "." + d
+						d := domain_name
+						domain_name := "zskldhoisdh123dnakjdshaksdjasmdnaksjdh" + "." + d
 						t := dns.TypeA
-						in, _, err := dnsUtils.GetRecordSetWithDNSSEC(line, t, server,c)
+						in, _, err := dnsUtils.GetRecordSetWithDNSSEC(domain_name, t, server,c)
 						if (err != nil) {
 							fmt.Println(err.Error())
-							manageError(strings.Join([]string{"nsec/3", line, err.Error()}, ""))
+							manageError(strings.Join([]string{"nsec/3", domain_name, err.Error()}, ""))
 						} else {
 							non_existence_status := in.Rcode;
-							dbController.UpdateNonExistence(domainid, non_existence_status, db);
+							dbController.UpdateNonExistence(domain_id, non_existence_status, db);
 
 							for _, ans := range in.Ns {
 								//authority section
@@ -541,17 +546,17 @@ func getDomainInfo(line string, run_id int, db *sql.DB) {
 									next := nsec.NextDomain
 									ttl := int(nsec.Hdr.Ttl)
 									//save nsec
-									nsec_id:=dbController.SaveNsec(domainid, last, next, ttl, run_id, db)
+									nsec_id:=dbController.SaveNsec(domain_id, last, next, ttl, run_id, db)
 									/*verify nsec in other task*/
 
-									if (dnsUtils.Less(line, last) == 0) {
+									if (dnsUtils.Less(domain_name, last) == 0) {
 										niswc=true
 									}else {
-										wildcardline := "*." + d
-										if (dnsUtils.Less(wildcardline, next) < 0) {
+										wildcarddomain_name := "*." + d
+										if (dnsUtils.Less(wildcarddomain_name, next) < 0) {
 											ncoverwc = true
 										}
-										if ((dnsUtils.Less(line, next) < 0 && dnsUtils.Less(line, last) > 0) || (dnsUtils.Less(line, last) > 0 && next == d)) {
+										if ((dnsUtils.Less(domain_name, next) < 0 && dnsUtils.Less(domain_name, last) > 0) || (dnsUtils.Less(domain_name, last) > 0 && next == d)) {
 											ncover = true
 										}
 									}
@@ -571,10 +576,10 @@ func getDomainInfo(line string, run_id int, db *sql.DB) {
 												expired = true
 											}
 											//---------------DNSKEY----------------------------
-											if (rrsig.SignerName != line) {
+											if (rrsig.SignerName != domain_name) {
 												dnskeys, _, _ = dnsUtils.GetRecordSetWithDNSSEC(rrsig.SignerName, dns.TypeDNSKEY, config_servers[0], c)
 											} else {
-												dnskeys = dnskeys_line
+												dnskeys = dnskeys_domain_name
 											}
 
 
@@ -608,12 +613,12 @@ func getDomainInfo(line string, run_id int, db *sql.DB) {
 									iterations := int(nsec3.Iterations)
 									hash_algorithm := int(nsec3.Hash)
 									salt := nsec3.Salt
-									nsec3_id:=dbController.SaveNsec3(domainid, hashed_name, next_hashed_name, iterations, hash_algorithm, salt, run_id, db)
+									nsec3_id:=dbController.SaveNsec3(domain_id, hashed_name, next_hashed_name, iterations, hash_algorithm, salt, run_id, db)
 									n3cover := false
 									n3coverwc := false
 									n3match := false
 									n3wc := false
-									n3cover = nsec3.Cover(line)
+									n3cover = nsec3.Cover(domain_name)
 									n3coverwc = nsec3.Cover("*." + d)
 									n3match = nsec3.Match(d)
 									n3wc = nsec3.Match("*."+d)
@@ -635,10 +640,10 @@ func getDomainInfo(line string, run_id int, db *sql.DB) {
 												expired = true
 											}
 											//---------------DNSKEY----------------------------
-											if (rrsig.SignerName != line) {
+											if (rrsig.SignerName != domain_name) {
 												dnskeys, _, _ = dnsUtils.GetRecordSetWithDNSSEC(rrsig.SignerName, dns.TypeDNSKEY, config_servers[0],c)
 											} else {
-												dnskeys = dnskeys_line
+												dnskeys = dnskeys_domain_name
 											}
 											if (dnskeys != nil && dnskeys.Answer != nil) {
 												key := dnsUtils.FindKey(dnskeys, rrsig)
