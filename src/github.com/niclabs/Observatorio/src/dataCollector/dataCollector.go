@@ -101,8 +101,10 @@ func collect(db *sql.DB, inputFile string, run_id int){
 	start_time:=time.Now()
 	domains_list, err := utils.ReadLines(inputFile)
 	if(err!=nil){
-		fmt.Println(err.Error())
+		fmt.Println("Error reading domains list" + err.Error())
+		return
 	}
+
 	config, _ := dns.ClientConfigFromFile("/etc/resolv.conf")
 	runtime.GOMAXPROCS(runtime.NumCPU())
 	fmt.Println("num CPU:",runtime.NumCPU())
