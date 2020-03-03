@@ -4,8 +4,6 @@ import (
 	"bytes"
 
 	"github.com/miekg/dns"
-	"database/sql"
-	"github.com/niclabs/Observatorio/src/dbController"
 	"strings"
 	"time"
 	"fmt"
@@ -89,11 +87,11 @@ func GetAAAARecords(line string, servers []string, c *dns.Client)([]net.IP, erro
 	}
 	IPv6s:=[]net.IP{}
 	for _,a := range aaaa_records.Answer{
-		if a1, ok := a.(*dns.AAAA); ok{
+		if a1, err := a.(*dns.AAAA); err{
 			IPv6s = append(IPv6s,a1.AAAA)
 		}
 	}
-	return IPv6s, ok
+	return IPv6s, err
 }
 
 // Request for the A records for the given domain
