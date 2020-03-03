@@ -47,6 +47,6 @@ func main(){
 	
 
 	dataCollector.InitCollect(cfg.RunArguments.Dontprobe_filepath, cfg.RunArguments.Drop_database, cfg.Database.Username, cfg.Database.Password, cfg.Database.Database_name)
-	dataCollector.Collect(cfg.RunArguments.Input_filepath, cfg.RunArguments.Concurrency, cfg.Database.Database_name, cfg.Database.Username, cfg.Database.Password, cfg.RunArguments.Debug)
+	dataCollector.StartCollect(cfg.RunArguments.Input_filepath, cfg.RunArguments.Concurrency, cfg.Database.Database_name, cfg.Database.Username, cfg.Database.Password, cfg.RunArguments.Debug)
 }
 

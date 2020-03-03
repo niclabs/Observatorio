@@ -77,9 +77,7 @@ func InitializeDontProbeList(dpf string)(dontProbeList  []*net.IPNet ){
 }
 
 
-func Collect(input string, c int, dbname string, user string, password string, debug bool) {
-	
-
+func StartCollect(input string, c int, dbname string, user string, password string, debug_bool bool) {
 	database, err := sql.Open("postgres", "user="+user+" password="+password+" dbname="+dbname+" sslmode=disable")
 	if err != nil {
 		fmt.Println(err)
@@ -88,26 +86,20 @@ func Collect(input string, c int, dbname string, user string, password string, d
 
 	fmt.Println("EXECUTING WITH ", c , " GOROUTINES;")
 	/*Initialize*/
-	SetConfigurations(c)
-	run_id := dbController.NewRun(database)
-
-	/*Collect data*/
-	CollectData(database, input, run_id, debug)
-	fmt.Println("TotalTime(nsec):", TotalTime ," (sec) ", TotalTime/1000000000," (min:sec) ", TotalTime/60000000000,":",TotalTime%60000000000/1000000000)
-	database.Close()
-	
-
-
-
-}
-func SetConfigurations(c int){
 	concurrency = c
+	run_id := dbController.NewRun(database)
+	debug = debug_bool
+	/*Collect data*/
+	collect(database, input, run_id)
+
+	fmt.Println("TotalTime(nsec):", TotalTime ," (sec) ", TotalTime/1000000000," (min:sec) ", TotalTime/60000000000,":",TotalTime%60000000000/1000000000)
+
+	database.Close()
 }
 
-func CollectData(db *sql.DB, inputFile string, run_id int, d bool ){
-	debug=d
-	t:=time.Now()
-	lines, err := utils.ReadLines(inputFile)
+func collect(db *sql.DB, inputFile string, run_id int){
+	start_time:=time.Now()
+	domains_list, err := utils.ReadLines(inputFile)
 	if(err!=nil){
 		fmt.Println(err.Error())
 	}
@@ -134,15 +126,15 @@ func CollectData(db *sql.DB, inputFile string, run_id int, d bool ){
 		}(run_id)
 	}
 	/*fill the queue with data to obtain*/
-	for _, line := range lines {
-		line := dns.Fqdn(line)
-		getDataQueue <- line
+	for _, domain_name := range domains_list {
+		domain_name := dns.Fqdn(domain_name)
+		getDataQueue <- domain_name
 	}
 	/*Close the queue*/
 	close(getDataQueue)
 	/*wait for routines to finish*/
 	wg.Wait()
-	TotalTime = (int)(time.Since(t).Nanoseconds())
+	TotalTime = (int)(time.Since(start_time).Nanoseconds())
 	dbController.SaveCorrectRun(run_id, TotalTime, true, db)
 	fmt.Println("Successful Run. run_id:", run_id)
 	db.Close()
