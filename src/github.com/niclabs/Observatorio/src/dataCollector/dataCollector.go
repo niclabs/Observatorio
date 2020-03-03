@@ -31,10 +31,15 @@ var geoip_asn_db *geoip2.Reader;
 
 var config_servers []string ;
 
+var weird_string_domain_name = "zskldhoisdh123dnakjdshaksdjasmdnaksjdh";//potentially unexistent subdomain To use with NSEC
 
-func InitCollect(dplf string , drop bool, user string, password string, dbname string){
+
+var dns_client *dns.Client;
+
+
+func InitCollect(dont_probe_file_name string , drop bool, user string, password string, dbname string){
 	//check Dont probelist file
-	dontProbeList = InitializeDontProbeList(dplf)
+	dontProbeList = InitializeDontProbeList(dont_probe_file_name)
 
 	//Init geoip
 	geoip_country_db, geoip_asn_db = geoIPUtils.InitGeoIP()	
@@ -55,6 +60,8 @@ func InitCollect(dplf string , drop bool, user string, password string, dbname s
 	//obtain config default dns servers
 	config, _ := dns.ClientConfigFromFile("/etc/resolv.conf")
 	config_servers = config.Servers 
+
+	dns_client = new(dns.Client)
 
 
 }
@@ -160,179 +167,193 @@ func manageError(err string){
 	}
 }
 
-func collectDomainInfo(domain_name string, run_id int, db *sql.DB) {
-	c:=new(dns.Client)
-	var domain_id int
-	/*create domain*/
-	domain_id = dbController.SaveDomain(domain_name, run_id, db)
-	/*Obtener NS del dominio*/
-	var domain_name_servers string;
-	{
-		/*Obtener NS del dominio*/
-		nss, _, err := dnsUtils.GetRecordSet(domain_name, dns.TypeNS, config_servers,c)
-		if (err != nil) {
-			if(nss!=nil){
-				fmt.Println("error but answer",nss.String())
+func getDomainsNameservers(domain_name string)(nameservers []dns.RR){
+	
+	nss, _, err := dnsUtils.GetRecordSet(domain_name, dns.TypeNS, config_servers, dns_client)
+	if (err != nil) {
+		manageError(strings.Join([]string{"get NS", domain_name, err.Error()}, ""))
+		fmt.Println("Error asking for NS", domain_name, err.Error())
+		return nil
+	}else {
+		if(len(nss.Answer) == 0 || nss.Answer == nil){
+			return nil
+		}
+		return nss.Answer
+	}
+}
+
+func obtain_NS_IPv4_info(ip net.IP, domain_id int, domain_name string, nameserver_id int, run_id int, db *sql.DB) (nameserver_ip_string string){
+	nameserver_ip_string = net.IP.String(ip)
+	dontProbe := true
+	asn := geoIPUtils.GetIPASN(nameserver_ip_string, geoip_asn_db)
+	country := geoIPUtils.GetIPCountry(nameserver_ip_string, geoip_country_db)
+	if (isIPInDontProbeList(ip)) {
+		fmt.Println("domain ", domain_name, "in DontProbeList", ip)
+		//TODO Future: save DONTPROBELIST in nameserver? and Domain?
+		dbController.SaveNSIP(nameserver_id, nameserver_ip_string, country, asn, dontProbe, run_id, db)
+		return ""
+	}
+	dontProbe = false
+	dbController.SaveNSIP(nameserver_id, nameserver_ip_string, country, asn, dontProbe, run_id, db)
+	return nameserver_ip_string
+}
+func obtain_NS_IPv6_info(ip net.IP, domain_id int, domain_name string, nameserver_id int, run_id int, db *sql.DB) (nameserver_ip_string string){
+	nameserver_ip_string = net.IP.String(ip)
+	country:= geoIPUtils.GetIPCountry(nameserver_ip_string, geoip_country_db)
+	asn := geoIPUtils.GetIPASN(nameserver_ip_string, geoip_asn_db)
+	dbController.SaveNSIP(nameserver_id, nameserver_ip_string, country, asn, false, run_id, db)
+	return nameserver_ip_string
+}
+func checkRecursivityAndEDNS(domain_name string, ns *dns.NS)(recursion_available bool, EDNS bool){
+	RecAndEDNS := new(dns.Msg)
+	RecAndEDNS, rtt, err := dnsUtils.GetRecursivityAndEDNS(domain_name, ns.Ns, "53", dns_client)
+	if (err != nil) {
+		manageError(strings.Join([]string{"Rec and EDNS", domain_name, ns.Ns, err.Error(), rtt.String()}, ""))
+	} else {
+		if (RecAndEDNS.RecursionAvailable) {
+			recursion_available = true
+		}
+		if (RecAndEDNS.IsEdns0() != nil) {
+			EDNS = true
+		}
+	}
+	return recursion_available, EDNS
+}
+func checkTCP(domain_name string, ns *dns.NS)(TCP bool){
+	dns_client.Net="tcp"
+	tcp, _, err := dnsUtils.GetRecordSetTCP(domain_name, dns.TypeSOA, []string{ns.Ns}, dns_client)
+	dns_client.Net="udp"
+	if (err != nil) {
+		//manageError(strings.Join([]string{"TCP", domain_name, ns.Ns, err.Error()},""))
+		return false
+	} else {
+		TCP = false
+		for _, tcpa := range tcp.Answer {
+			if (tcpa != nil) {
+				TCP = true
+				break
 			}
-			manageError(strings.Join([]string{"get NS", domain_name, err.Error()}, ""))
-			fmt.Println("Error asking for NS", domain_name, err.Error())
-		} else {
-			if(len(nss.Answer)==0 || nss.Answer==nil){
-				if(nss.Answer==nil){
-					fmt.Println("no answer","no NS asociated to domain:", domain_name, nss.Answer)
-				} else{
-					fmt.Println("0 answer","no NS asociated to domain:", domain_name, nss.Answer)
-
-					for _, ns := range nss.Answer {
-						fmt.Println(ns.String())
-					}
-				}
-			}
-			NameServer:
-			for _, ns := range nss.Answer {
-				if ns, ok := ns.(*dns.NS); ok {
-					var nameserverid int
-					available, rtt, err := dnsUtils.CheckAvailability(domain_name, ns,c)
-					if (err != nil) {
-						nameserverid = dbController.CreateNS(ns, domain_id, run_id, db, false)
-						manageError(strings.Join([]string{"checkAvailability", domain_name, ns.Ns, err.Error(), rtt.String()}, ""))
-					} else {
-						/*create ns*/
-						{
-							/*create ns*/
-							nameserverid = dbController.CreateNS(ns, domain_id, run_id, db, available)
-						}
-
-						/*get A and AAAA*/
-						{
-							/*get A and AAAA*/
-							//getANSRecord:
-							ipv4, err := dnsUtils.GetARecords(ns.Ns, config_servers,c)
-							if (err != nil) {
-
-								manageError(strings.Join([]string{"getANS", domain_name, ns.Ns, err.Error()}, ""))
-							} else {
-
-								for _, ip := range ipv4 {
-									ips := net.IP.String(ip)
-									dontProbe := true
-									asn := geoIPUtils.GetIPASN(ips, geoip_asn_db)
-									country := geoIPUtils.GetIPCountry(ips, geoip_country_db)
-									if (isIPInDontProbeList(ip)) {
-										fmt.Println("domain ", domain_name, "in DontProbeList", ip)
-										//TODO Future: save DONTPROBELIST in nameserver? and Domain?
-										dbController.SaveNSIP(nameserverid, ips, country, asn, dontProbe, run_id, db)
-										continue NameServer
-									}
-									dontProbe= false
-									domain_name_servers = ips;
-									dbController.SaveNSIP(nameserverid, ips, country, asn, dontProbe, run_id, db)
-								}
-							}
-							//getAAAANSRecord:
-							ipv6, err := dnsUtils.GetAAAARecords(ns.Ns, config_servers,c)
-							if (err != nil) {
-
-								manageError(strings.Join([]string{"getAAAANS", domain_name, ns.Ns, err.Error()}, ""))
-							} else {
-								for _, ip := range ipv6 {
-									ips := net.IP.String(ip)
-									country:= geoIPUtils.GetIPCountry(ips, geoip_country_db)
-									asn := geoIPUtils.GetIPASN(ips, geoip_asn_db)
-									dbController.SaveNSIP(nameserverid, ips, country, asn, false, run_id, db)
-								}
-							}
-						}
-
-						if (len(domain_name_servers)!=0) {
-							recursivity := false
-							EDNS := false
-							loc_query := false
-							TCP := false
-							zone_transfer := false
-							if (available) {
-								//edns, recursivity, tcp, zone_transfer, loc_query
-								//------------------------------Recursividad y EDNS----------------------
-								RecAndEDNS := new(dns.Msg)
-								RecAndEDNS, rtt, err = dnsUtils.GetRecursivityAndEDNS(domain_name, ns.Ns, "53",c)
-								if (err != nil) {
-									manageError(strings.Join([]string{"Rec and EDNS", domain_name, ns.Ns, err.Error(), rtt.String()}, ""))
-								} else {
-									if (RecAndEDNS.RecursionAvailable) {
-										recursivity = true
-									}
-									if (RecAndEDNS.IsEdns0() != nil) {
-										EDNS = true
-									}
-								}
-
-
-
-								//TCP---------------------
-								c.Net="tcp"
-								tcp, _, err := dnsUtils.GetRecordSetTCP(domain_name, dns.TypeSOA, []string{ns.Ns},c)
-								c.Net="udp"
-								if (err != nil) {
-									//manageError(strings.Join([]string{"TCP", domain_name, ns.Ns, err.Error()},""))
-								} else {
-									for _, tcpa := range tcp.Answer {
-										if (tcpa != nil) {
-											TCP = true
-											break
-										}
-									}
-								}
-
-								//Zone transfer---------------------
-								zt, err := dnsUtils.ZoneTransfer(domain_name, ns.Ns)
-								if (err != nil) {
-									manageError(strings.Join([]string{"zoneTransfer", domain_name, ns.Ns, err.Error()}, ""))
-								} else {
-									val := <-zt
-									if val != nil {
-										if(val.Error!=nil) {
-										} else{
-											zone_transfer = true
-										}
-
-
-									}
-								}
-
-
-
-								//Wrong Queries (tipos extraños como loc)
-								loc, _, err := dnsUtils.GetRecordSet(domain_name, dns.TypeLOC, []string{ns.Ns},c)
-								if (err != nil) {
-									manageError(strings.Join([]string{"locQuery", domain_name, ns.Ns, err.Error()}, ""))
-								} else {
-									for _, loca := range loc.Answer {
-										if _, ok := loca.(*dns.LOC); ok {
-											loc_query = true
-											break
-										}
-									}
-								}
-							}
-							dbController.SaveNS(recursivity, EDNS, TCP, zone_transfer, loc_query, nameserverid, db)
-						}
-
-					}
-
-				}
-
+		}
+		return TCP
+	}
+}
+func checkZoneTransfer(domain_name string, ns *dns.NS)(zone_transfer bool){
+	zone_transfer = false
+	zt, err := dnsUtils.ZoneTransfer(domain_name, ns.Ns)
+	if (err != nil) {
+		manageError(strings.Join([]string{"zoneTransfer", domain_name, ns.Ns, err.Error()}, ""))
+	} else {
+		val := <-zt
+		if val != nil {
+			if(val.Error!=nil) {
+			} else{
+				fmt.Printf("zone_transfer succeded oh oh!!")
+				zone_transfer = true
 			}
 		}
 	}
-	//checkServer
+	return zone_transfer
+}
+func checkLOCQuery(domain_name string, ns *dns.NS)(loc_query bool){
+	loc_query = false
+	loc, _, err := dnsUtils.GetRecordSet(domain_name, dns.TypeLOC, []string{ns.Ns}, dns_client)
+	if (err != nil) {
+		manageError(strings.Join([]string{"locQuery", domain_name, ns.Ns, err.Error()}, ""))
+	} else {
+		for _, loca := range loc.Answer {
+			if _, ok := loca.(*dns.LOC); ok {
+				loc_query = true
+				break
+			}
+		}
+	}
+	return loc_query
+}
+func collectDomainInfo(domain_name string, run_id int, db *sql.DB) {
+	
+	var domain_id int
+
+	// Create domain and save it in database
+	domain_id = dbController.SaveDomain(domain_name, run_id, db)
+
+	/*Obtener NS del dominio*/
+	var domain_name_servers [] string;
+	{
+		/*Obtener NSs del dominio*/
+		var domains_nameservers []dns.RR = getDomainsNameservers(domain_name)
 
 
+		for _, nameserver:=  range domains_nameservers{//for each nameserver of the current domain_name
+			if ns, ok := nameserver.(*dns.NS); ok {
+				var nameserver_id int
+				available, rtt, err := dnsUtils.CheckAvailability(domain_name, ns, dns_client) //check if IPv4 exists
+				if (err != nil) {
+					nameserver_id = dbController.CreateNS(ns, domain_id, run_id, db, false)
+					manageError(strings.Join([]string{"checkAvailability", domain_name, ns.Ns, err.Error(), rtt.String()}, ""))
+				} else {
+					nameserver_id = dbController.CreateNS(ns, domain_id, run_id, db, available) //create NS in database
+
+					//get A records for NS
+					ipv4, err := dnsUtils.GetARecords(ns.Ns, config_servers, dns_client)
+					if (err != nil) {
+						manageError(strings.Join([]string{"getANS", domain_name, ns.Ns, err.Error()}, ""))
+					} else {
+						for _, ip := range ipv4 {
+							nameserver_ip_string := obtain_NS_IPv4_info(ip, domain_id, domain_name, nameserver_id, run_id, db)
+							if( nameserver_ip_string != ""){
+								domain_name_servers = append(domain_name_servers, nameserver_ip_string)
+							}
+						}
+					}
+					//get AAAA records for NS
+					ipv6, err := dnsUtils.GetAAAARecords(ns.Ns, config_servers, dns_client)
+					if (err != nil) {
+						manageError(strings.Join([]string{"getAAAANS", domain_name, ns.Ns, err.Error()}, ""))
+					} else {
+						for _, ip := range ipv6 {
+							nameserver_ip_string := obtain_NS_IPv6_info(ip, domain_id, domain_name, nameserver_id, run_id, db)
+							if( nameserver_ip_string != ""){
+								domain_name_servers = append(domain_name_servers, nameserver_ip_string)
+							}
+						}
+					}
+
+					//if there is at least one nameserver with IP...
+					if (len(domain_name_servers)!=0) {
+						recursivity := false
+						EDNS := false
+						loc_query := false
+						TCP := false
+						zone_transfer := false
+						if (available) {
+							//edns, recursivity, tcp, zone_transfer, loc_query
+							//------------------------------Recursividad y EDNS----------------------
+							recursivity, EDNS = checkRecursivityAndEDNS(domain_name, ns)
+							
+							//TCP---------------------
+							TCP = checkTCP(domain_name, ns)
+							
+							//Zone transfer---------------------
+							zone_transfer = checkZoneTransfer(domain_name, ns)
+							
+							//Wrong Queries (tipos extraños como loc)
+							loc_query = checkLOCQuery(domain_name,ns)
+						}
+						dbController.SaveNS(recursivity, EDNS, TCP, zone_transfer, loc_query, nameserver_id, db)
+					}
+				}
+			}
+		}
+	}
+	// end check nameservers
+
+	//Check domain info (asking to NS)
 	if (len(domain_name_servers)!=0) {
 		//Get A and AAAA records
 		{
 			//Get A and AAAA records
 
-			ipv4, err := dnsUtils.GetARecords(domain_name, []string{domain_name_servers},c)
+			ipv4, err := dnsUtils.GetARecords(domain_name, domain_name_servers, dns_client)
 
 			if (err != nil) {
 				manageError(strings.Join([]string{"get a record", domain_name, err.Error()}, ""))
@@ -343,7 +364,7 @@ func collectDomainInfo(domain_name string, run_id int, db *sql.DB) {
 				}
 			}
 
-			ipv6, err := dnsUtils.GetAAAARecords(domain_name, []string{domain_name_servers},c)
+			ipv6, err := dnsUtils.GetAAAARecords(domain_name, domain_name_servers, dns_client)
 			if (err != nil) {
 
 				manageError(strings.Join([]string{"get AAAA record", domain_name, err.Error()}, ""))
@@ -359,7 +380,7 @@ func collectDomainInfo(domain_name string, run_id int, db *sql.DB) {
 		{
 			/*check soa*/
 			SOA := false
-			soa, err := dnsUtils.CheckSOA(domain_name, []string{domain_name_servers},c)
+			soa, err := dnsUtils.CheckSOA(domain_name, domain_name_servers, dns_client)
 			if (err != nil) {
 				manageError(strings.Join([]string{"check soa", domain_name, err.Error()}, ""))
 
@@ -384,7 +405,7 @@ func collectDomainInfo(domain_name string, run_id int, db *sql.DB) {
 			/*check DNSSEC*/
 
 			/*ds*/
-			dss, _, err := dnsUtils.GetRecordSet(domain_name, dns.TypeDS, config_servers,c)
+			dss, _, err := dnsUtils.GetRecordSet(domain_name, dns.TypeDS, config_servers, dns_client)
 			if (err != nil) {
 				//manageError(strings.Join([]string{"DS record", domain_name, err.Error()}, ""))
 			} else {
@@ -404,7 +425,7 @@ func collectDomainInfo(domain_name string, run_id int, db *sql.DB) {
 					}
 				}
 				if(ds_found) {
-					rrsigs, _, err := dnsUtils.GetRecordSetWithDNSSEC(domain_name, dns.TypeDS, config_servers[0], c)
+					rrsigs, _, err := dnsUtils.GetRecordSetWithDNSSEC(domain_name, dns.TypeDS, config_servers[0], dns_client)
 					if (err != nil) {
 						//manageError(strings.Join([]string{"DS record", domain_name, err.Error()}, ""))
 					} else {
@@ -423,7 +444,7 @@ func collectDomainInfo(domain_name string, run_id int, db *sql.DB) {
 									expired = true
 								}
 								//---------------DNSKEY----------------------------
-								dnskeys, _, _ = dnsUtils.GetRecordSetWithDNSSEC(rrsig.SignerName, dns.TypeDNSKEY, config_servers[0], c)
+								dnskeys, _, _ = dnsUtils.GetRecordSetWithDNSSEC(rrsig.SignerName, dns.TypeDNSKEY, config_servers[0], dns_client)
 								if (dnskeys != nil && dnskeys.Answer != nil) {
 									key := dnsUtils.FindKey(dnskeys, rrsig)
 									if (key != nil) {
@@ -454,7 +475,7 @@ func collectDomainInfo(domain_name string, run_id int, db *sql.DB) {
 
 
 
-			dnskeys_domain_name, _, err := dnsUtils.GetRecordSetWithDNSSEC(domain_name, dns.TypeDNSKEY, domain_name_servers,c)
+			dnskeys_domain_name, _, err := dnsUtils.GetRecordSetWithDNSSEC(domain_name, dns.TypeDNSKEY, domain_name_servers[0], dns_client)
 			if (err != nil) {
 				manageError(strings.Join([]string{"dnskey", domain_name, err.Error()}, ""))
 			} else {
@@ -498,7 +519,7 @@ func collectDomainInfo(domain_name string, run_id int, db *sql.DB) {
 								expired = true
 							}
 							//---------------DNSKEY----------------------------
-							dnskeys, _, _ = dnsUtils.GetRecordSetWithDNSSEC(rrsig1.SignerName, dns.TypeDNSKEY, config_servers[0], c)
+							dnskeys, _, _ = dnsUtils.GetRecordSetWithDNSSEC(rrsig1.SignerName, dns.TypeDNSKEY, config_servers[0], dns_client)
 							if (dnskeys != nil && dnskeys.Answer != nil) {
 								key := dnsUtils.FindKey(dnskeys, rrsig1)
 								if (key != nil) {
@@ -526,9 +547,9 @@ func collectDomainInfo(domain_name string, run_id int, db *sql.DB) {
 					/*nsec/3*/
 					{
 						d := domain_name
-						domain_name := "zskldhoisdh123dnakjdshaksdjasmdnaksjdh" + "." + d
+						domain_name := weird_string_domain_name + "." + d
 						t := dns.TypeA
-						in, _, err := dnsUtils.GetRecordSetWithDNSSEC(domain_name, t, domain_name_servers,c)
+						in, _, err := dnsUtils.GetRecordSetWithDNSSEC(domain_name, t, domain_name_servers[0], dns_client)
 						if (err != nil) {
 							fmt.Println(err.Error())
 							manageError(strings.Join([]string{"nsec/3", domain_name, err.Error()}, ""))
@@ -577,7 +598,7 @@ func collectDomainInfo(domain_name string, run_id int, db *sql.DB) {
 											}
 											//---------------DNSKEY----------------------------
 											if (rrsig.SignerName != domain_name) {
-												dnskeys, _, _ = dnsUtils.GetRecordSetWithDNSSEC(rrsig.SignerName, dns.TypeDNSKEY, config_servers[0], c)
+												dnskeys, _, _ = dnsUtils.GetRecordSetWithDNSSEC(rrsig.SignerName, dns.TypeDNSKEY, config_servers[0], dns_client)
 											} else {
 												dnskeys = dnskeys_domain_name
 											}
@@ -641,7 +662,7 @@ func collectDomainInfo(domain_name string, run_id int, db *sql.DB) {
 											}
 											//---------------DNSKEY----------------------------
 											if (rrsig.SignerName != domain_name) {
-												dnskeys, _, _ = dnsUtils.GetRecordSetWithDNSSEC(rrsig.SignerName, dns.TypeDNSKEY, config_servers[0],c)
+												dnskeys, _, _ = dnsUtils.GetRecordSetWithDNSSEC(rrsig.SignerName, dns.TypeDNSKEY, config_servers[0], dns_client)
 											} else {
 												dnskeys = dnskeys_domain_name
 											}
