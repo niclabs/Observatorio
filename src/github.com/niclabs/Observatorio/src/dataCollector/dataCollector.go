@@ -269,6 +269,33 @@ func checkLOCQuery(domain_name string, ns string)(loc_query bool){
 	}
 	return loc_query
 }
+
+func getAndSaveDomainIPv4(domain_name string, domain_name_servers []string, dns_client *dns.Client, domain_id int, run_id int , db *sql.DB)(){
+	ipv4, err := dnsUtils.GetARecords(domain_name, domain_name_servers, dns_client)
+	if (err != nil) {
+		manageError(strings.Join([]string{"get a record", domain_name, err.Error()}, ""))
+	} else {
+		for _, ip := range ipv4 {
+			ips := net.IP.String(ip)
+			dbController.SaveDomainIp(ips, domain_id, run_id, db)
+		}
+	}
+	return
+}
+
+func getAndSaveDomainIPv6(domain_name string, domain_name_servers []string, dns_client *dns.Client, domain_id int, run_id int, db *sql.DB)(){
+			
+	ipv6, err := dnsUtils.GetAAAARecords(domain_name, domain_name_servers, dns_client)
+	if (err != nil) {
+
+		manageError(strings.Join([]string{"get AAAA record", domain_name, err.Error()}, ""))
+	} else {
+		for _, ip := range ipv6 {
+			ips := net.IP.String(ip)
+			dbController.SaveDomainIp(ips, domain_id, run_id, db)
+		}
+	}
+}
 func collectDomainInfo(domain_name string, run_id int, db *sql.DB) {
 	
 	var domain_id int
@@ -278,8 +305,8 @@ func collectDomainInfo(domain_name string, run_id int, db *sql.DB) {
 
 	/*Obtener NS del dominio*/
 	var domain_name_servers [] string;
-	{
-		/*Obtener NSs del dominio*/
+	{//Check NSs of the domain
+		/*Obtener NSs del dominio*/	
 		var domains_nameservers []dns.RR = getDomainsNameservers(domain_name)
 
 
@@ -341,27 +368,16 @@ func collectDomainInfo(domain_name string, run_id int, db *sql.DB) {
 				}
 			}
 		}
-	}
-	// end check nameservers
+	}// end check nameservers
 
 
 	//Check domain info (asking to NS)
 	if (len(domain_name_servers)!=0) {
-		//Get A and AAAA records
-		{
-			//Get A and AAAA records
-
-			ipv4, err := dnsUtils.GetARecords(domain_name, domain_name_servers, dns_client)
-
-			if (err != nil) {
-				manageError(strings.Join([]string{"get a record", domain_name, err.Error()}, ""))
-			} else {
-				for _, ip := range ipv4 {
-					ips := net.IP.String(ip)
-					dbController.SaveDomainIp(ips, domain_id, run_id, db)
-				}
-			}
-
+		
+		{//Get A and AAAA records
+			getAndSaveDomainIPv4(domain_name, domain_name_servers, dns_client, domain_id, run_id, db)
+			getAndSaveDomainIPv6(domain_name, domain_name_servers, dns_client, domain_id, run_id, db)
+			
 			ipv6, err := dnsUtils.GetAAAARecords(domain_name, domain_name_servers, dns_client)
 			if (err != nil) {
 
