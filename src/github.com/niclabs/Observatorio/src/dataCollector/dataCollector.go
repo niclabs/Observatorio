@@ -296,6 +296,22 @@ func getAndSaveDomainIPv6(domain_name string, domain_name_servers []string, dns_
 		}
 	}
 }
+
+func getAndSaveDomainSOA(domain_name string, domain_name_servers []string, dns_client *dns.Client, domain_id int, run_id int, db *sql.DB)(){
+	/*check soa*/
+	SOA := false
+	soa, err := dnsUtils.CheckSOA(domain_name, domain_name_servers, dns_client)
+	if (err != nil) {
+		manageError(strings.Join([]string{"check soa", domain_name, err.Error()}, ""))
+	} else {
+		for _, soar := range soa.Answer {
+			if _, ok := soar.(*dns.SOA); ok {
+				SOA = true
+			}
+		}
+	}
+	dbController.SaveSoa(SOA, domain_id, db)
+}
 func collectDomainInfo(domain_name string, run_id int, db *sql.DB) {
 	
 	var domain_id int
@@ -374,41 +390,14 @@ func collectDomainInfo(domain_name string, run_id int, db *sql.DB) {
 	//Check domain info (asking to NS)
 	if (len(domain_name_servers)!=0) {
 		
-		{//Get A and AAAA records
-			getAndSaveDomainIPv4(domain_name, domain_name_servers, dns_client, domain_id, run_id, db)
-			getAndSaveDomainIPv6(domain_name, domain_name_servers, dns_client, domain_id, run_id, db)
+		//Get A and AAAA records
+		getAndSaveDomainIPv4(domain_name, domain_name_servers, dns_client, domain_id, run_id, db)
+		getAndSaveDomainIPv6(domain_name, domain_name_servers, dns_client, domain_id, run_id, db)
 			
-			ipv6, err := dnsUtils.GetAAAARecords(domain_name, domain_name_servers, dns_client)
-			if (err != nil) {
 
-				manageError(strings.Join([]string{"get AAAA record", domain_name, err.Error()}, ""))
-			} else {
-				for _, ip := range ipv6 {
-					ips := net.IP.String(ip)
-					dbController.SaveDomainIp(ips, domain_id, run_id, db)
-				}
-			}
-		}
-
-		/*check soa*/
-		{
-			/*check soa*/
-			SOA := false
-			soa, err := dnsUtils.CheckSOA(domain_name, domain_name_servers, dns_client)
-			if (err != nil) {
-				manageError(strings.Join([]string{"check soa", domain_name, err.Error()}, ""))
-
-			} else {
-
-				for _, soar := range soa.Answer {
-					if _, ok := soar.(*dns.SOA); ok {
-						SOA = true
-					}
-				}
-			}
-			dbController.SaveSoa(SOA, domain_id, db)
-
-		}
+		// Check SOA record
+		getAndSaveDomainSOA(domain_name, domain_name_servers, dns_client, domain_id, run_id, db)
+		
 
 
 		//var server string;
