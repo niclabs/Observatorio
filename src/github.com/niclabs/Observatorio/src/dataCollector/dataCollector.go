@@ -204,11 +204,11 @@ func obtain_NS_IPv6_info(ip net.IP, domain_id int, domain_name string, nameserve
 	dbController.SaveNSIP(nameserver_id, nameserver_ip_string, country, asn, false, run_id, db)
 	return nameserver_ip_string
 }
-func checkRecursivityAndEDNS(domain_name string, ns *dns.NS)(recursion_available bool, EDNS bool){
+func checkRecursivityAndEDNS(domain_name string, ns string)(recursion_available bool, EDNS bool){
 	RecAndEDNS := new(dns.Msg)
-	RecAndEDNS, rtt, err := dnsUtils.GetRecursivityAndEDNS(domain_name, ns.Ns, "53", dns_client)
+	RecAndEDNS, rtt, err := dnsUtils.GetRecursivityAndEDNS(domain_name, ns, "53", dns_client)
 	if (err != nil) {
-		manageError(strings.Join([]string{"Rec and EDNS", domain_name, ns.Ns, err.Error(), rtt.String()}, ""))
+		manageError(strings.Join([]string{"Rec and EDNS", domain_name, ns, err.Error(), rtt.String()}, ""))
 	} else {
 		if (RecAndEDNS.RecursionAvailable) {
 			recursion_available = true
@@ -219,9 +219,9 @@ func checkRecursivityAndEDNS(domain_name string, ns *dns.NS)(recursion_available
 	}
 	return recursion_available, EDNS
 }
-func checkTCP(domain_name string, ns *dns.NS)(TCP bool){
+func checkTCP(domain_name string, ns string)(TCP bool){
 	dns_client.Net="tcp"
-	tcp, _, err := dnsUtils.GetRecordSetTCP(domain_name, dns.TypeSOA, []string{ns.Ns}, dns_client)
+	tcp, _, err := dnsUtils.GetRecordSetTCP(domain_name, dns.TypeSOA, ns, dns_client)
 	dns_client.Net="udp"
 	if (err != nil) {
 		//manageError(strings.Join([]string{"TCP", domain_name, ns.Ns, err.Error()},""))
@@ -237,11 +237,11 @@ func checkTCP(domain_name string, ns *dns.NS)(TCP bool){
 		return TCP
 	}
 }
-func checkZoneTransfer(domain_name string, ns *dns.NS)(zone_transfer bool){
+func checkZoneTransfer(domain_name string, ns string)(zone_transfer bool){
 	zone_transfer = false
-	zt, err := dnsUtils.ZoneTransfer(domain_name, ns.Ns)
+	zt, err := dnsUtils.ZoneTransfer(domain_name, ns)
 	if (err != nil) {
-		manageError(strings.Join([]string{"zoneTransfer", domain_name, ns.Ns, err.Error()}, ""))
+		manageError(strings.Join([]string{"zoneTransfer", domain_name, ns, err.Error()}, ""))
 	} else {
 		val := <-zt
 		if val != nil {
@@ -254,11 +254,11 @@ func checkZoneTransfer(domain_name string, ns *dns.NS)(zone_transfer bool){
 	}
 	return zone_transfer
 }
-func checkLOCQuery(domain_name string, ns *dns.NS)(loc_query bool){
+func checkLOCQuery(domain_name string, ns string)(loc_query bool){
 	loc_query = false
-	loc, _, err := dnsUtils.GetRecordSet(domain_name, dns.TypeLOC, []string{ns.Ns}, dns_client)
+	loc, _, err := dnsUtils.GetRecordSet(domain_name, dns.TypeLOC, []string{ns}, dns_client)
 	if (err != nil) {
-		manageError(strings.Join([]string{"locQuery", domain_name, ns.Ns, err.Error()}, ""))
+		manageError(strings.Join([]string{"locQuery", domain_name, ns, err.Error()}, ""))
 	} else {
 		for _, loca := range loc.Answer {
 			if _, ok := loca.(*dns.LOC); ok {
@@ -318,7 +318,7 @@ func collectDomainInfo(domain_name string, run_id int, db *sql.DB) {
 						}
 					}
 
-					//if there is at least one nameserver with IP...
+					// if there is at least one nameserver with IP...
 					if (len(domain_name_servers)!=0) {
 						recursivity := false
 						EDNS := false
@@ -326,18 +326,15 @@ func collectDomainInfo(domain_name string, run_id int, db *sql.DB) {
 						TCP := false
 						zone_transfer := false
 						if (available) {
-							//edns, recursivity, tcp, zone_transfer, loc_query
-							//------------------------------Recursividad y EDNS----------------------
-							recursivity, EDNS = checkRecursivityAndEDNS(domain_name, ns)
-							
-							//TCP---------------------
-							TCP = checkTCP(domain_name, ns)
-							
-							//Zone transfer---------------------
-							zone_transfer = checkZoneTransfer(domain_name, ns)
-							
-							//Wrong Queries (tipos extraños como loc)
-							loc_query = checkLOCQuery(domain_name,ns)
+							// edns, recursivity, tcp, zone_transfer, loc_query
+							// Recursividad y EDNS
+							recursivity, EDNS = checkRecursivityAndEDNS(domain_name, ns.Ns)
+							// TCP
+							TCP = checkTCP(domain_name, ns.Ns)
+							// Zone transfer
+							zone_transfer = checkZoneTransfer(domain_name, ns.Ns)
+							// Wrong Queries (tipos extraños como loc)
+							loc_query = checkLOCQuery(domain_name, ns.Ns)
 						}
 						dbController.SaveNS(recursivity, EDNS, TCP, zone_transfer, loc_query, nameserver_id, db)
 					}
@@ -346,6 +343,7 @@ func collectDomainInfo(domain_name string, run_id int, db *sql.DB) {
 		}
 	}
 	// end check nameservers
+
 
 	//Check domain info (asking to NS)
 	if (len(domain_name_servers)!=0) {
@@ -425,7 +423,7 @@ func collectDomainInfo(domain_name string, run_id int, db *sql.DB) {
 					}
 				}
 				if(ds_found) {
-					rrsigs, _, err := dnsUtils.GetRecordSetWithDNSSEC(domain_name, dns.TypeDS, config_servers[0], dns_client)
+					rrsigs, _, err := dnsUtils.GetRecordSetWithDNSSEC(domain_name, dns.TypeDS, config_servers, dns_client)
 					if (err != nil) {
 						//manageError(strings.Join([]string{"DS record", domain_name, err.Error()}, ""))
 					} else {
@@ -444,7 +442,7 @@ func collectDomainInfo(domain_name string, run_id int, db *sql.DB) {
 									expired = true
 								}
 								//---------------DNSKEY----------------------------
-								dnskeys, _, _ = dnsUtils.GetRecordSetWithDNSSEC(rrsig.SignerName, dns.TypeDNSKEY, config_servers[0], dns_client)
+								dnskeys, _, _ = dnsUtils.GetRecordSetWithDNSSEC(rrsig.SignerName, dns.TypeDNSKEY, config_servers, dns_client)
 								if (dnskeys != nil && dnskeys.Answer != nil) {
 									key := dnsUtils.FindKey(dnskeys, rrsig)
 									if (key != nil) {
@@ -475,7 +473,7 @@ func collectDomainInfo(domain_name string, run_id int, db *sql.DB) {
 
 
 
-			dnskeys_domain_name, _, err := dnsUtils.GetRecordSetWithDNSSEC(domain_name, dns.TypeDNSKEY, domain_name_servers[0], dns_client)
+			dnskeys_domain_name, _, err := dnsUtils.GetRecordSetWithDNSSEC(domain_name, dns.TypeDNSKEY, domain_name_servers, dns_client)
 			if (err != nil) {
 				manageError(strings.Join([]string{"dnskey", domain_name, err.Error()}, ""))
 			} else {
@@ -519,7 +517,7 @@ func collectDomainInfo(domain_name string, run_id int, db *sql.DB) {
 								expired = true
 							}
 							//---------------DNSKEY----------------------------
-							dnskeys, _, _ = dnsUtils.GetRecordSetWithDNSSEC(rrsig1.SignerName, dns.TypeDNSKEY, config_servers[0], dns_client)
+							dnskeys, _, _ = dnsUtils.GetRecordSetWithDNSSEC(rrsig1.SignerName, dns.TypeDNSKEY, config_servers, dns_client)
 							if (dnskeys != nil && dnskeys.Answer != nil) {
 								key := dnsUtils.FindKey(dnskeys, rrsig1)
 								if (key != nil) {
@@ -549,7 +547,7 @@ func collectDomainInfo(domain_name string, run_id int, db *sql.DB) {
 						d := domain_name
 						domain_name := weird_string_domain_name + "." + d
 						t := dns.TypeA
-						in, _, err := dnsUtils.GetRecordSetWithDNSSEC(domain_name, t, domain_name_servers[0], dns_client)
+						in, _, err := dnsUtils.GetRecordSetWithDNSSEC(domain_name, t, domain_name_servers, dns_client)
 						if (err != nil) {
 							fmt.Println(err.Error())
 							manageError(strings.Join([]string{"nsec/3", domain_name, err.Error()}, ""))
@@ -598,7 +596,7 @@ func collectDomainInfo(domain_name string, run_id int, db *sql.DB) {
 											}
 											//---------------DNSKEY----------------------------
 											if (rrsig.SignerName != domain_name) {
-												dnskeys, _, _ = dnsUtils.GetRecordSetWithDNSSEC(rrsig.SignerName, dns.TypeDNSKEY, config_servers[0], dns_client)
+												dnskeys, _, _ = dnsUtils.GetRecordSetWithDNSSEC(rrsig.SignerName, dns.TypeDNSKEY, config_servers, dns_client)
 											} else {
 												dnskeys = dnskeys_domain_name
 											}
@@ -662,7 +660,7 @@ func collectDomainInfo(domain_name string, run_id int, db *sql.DB) {
 											}
 											//---------------DNSKEY----------------------------
 											if (rrsig.SignerName != domain_name) {
-												dnskeys, _, _ = dnsUtils.GetRecordSetWithDNSSEC(rrsig.SignerName, dns.TypeDNSKEY, config_servers[0], dns_client)
+												dnskeys, _, _ = dnsUtils.GetRecordSetWithDNSSEC(rrsig.SignerName, dns.TypeDNSKEY, config_servers, dns_client)
 											} else {
 												dnskeys = dnskeys_domain_name
 											}

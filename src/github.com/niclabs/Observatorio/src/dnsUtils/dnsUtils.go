@@ -112,21 +112,21 @@ func GetARecords(line string, servers []string, c *dns.Client)([]net.IP, error){
 }
 
 // Request a record set using TCP
-func GetRecordSetTCP(line string, t uint16, servers []string, c *dns.Client)(*dns.Msg, time.Duration, error){
+func GetRecordSetTCP(line string, t uint16, server string, c *dns.Client)(*dns.Msg, time.Duration, error){
 	m := new(dns.Msg)
 	m.SetQuestion(line, t)
 	c.Net="tcp"
-	return ExchangeWithRetry(m,c,servers)
+	return ExchangeWithRetry(m, c, []string{server})
 }
 
 // Request a record set using DNSSEC
-func GetRecordSetWithDNSSEC(line string, t uint16, server string, c *dns.Client)(*dns.Msg, time.Duration, error){
+func GetRecordSetWithDNSSEC(line string, t uint16, servers []string, c *dns.Client)(*dns.Msg, time.Duration, error){
 	m := new(dns.Msg)
 	m.SetQuestion(line, t)
 	m.SetEdns0(4096,true)
 	c= new(dns.Client)
 	c.Net="tcp"
-	return ExchangeWithRetry(m,c,[]string{server})
+	return ExchangeWithRetry(m,c,servers)
 }
 
 /*func GetRecordSetWithDNSSECformServer(line string, t uint16, server string, c *dns.Client)(*dns.Msg, time.Duration, error) {
@@ -139,11 +139,11 @@ func GetRecordSetWithDNSSEC(line string, t uint16, server string, c *dns.Client)
 }*/
 
 // Makes a request using recursivity and EDNS
-func GetRecursivityAndEDNS(line string, ns string, port string, c *dns.Client)(*dns.Msg,time.Duration, error){
+func GetRecursivityAndEDNS(line string, server string, port string, c *dns.Client)(*dns.Msg,time.Duration, error){
 	m := new(dns.Msg)
 	m.SetEdns0(4096, true)
 	m.SetQuestion(line, dns.TypeSOA)
-	return ExchangeWithRetry(m,c,[]string{ns})
+	return ExchangeWithRetry(m, c, []string{server})
 }
 
 
