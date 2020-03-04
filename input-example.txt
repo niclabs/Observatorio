@@ -27,3 +27,4 @@ papelesandalien.cl
 elcuartodigital.cl
 puertolirquen.cl
 yuyu.cl
+nic.cl
