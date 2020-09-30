@@ -2,51 +2,37 @@
 Software desarrollado con el fin de recolectar y analizar datos de un grupo de dominios.
 
 
+##Requisitos
+Correr en sistema Linux (probado en Ubuntu 19.10)
+Tener una instalación de Go (probado con version go1.12.10 linux/amd64)
+
 ##Instalación
 
- - Clonar el repositorio
- - Instalar golang:
-
-> $wget https://storage.googleapis.com/golang/go1.10.1.linux-amd64.tar.gz
-
-> $sudo tar -zxvf go1.10.1.linux-amd64.tar.gz -C /usr/local/
-
- - Setear path Go:
-
-Modificar el archivo ~/.profile para modificar los paths, para decirle al sistema dónde está go y cuál es el path donde encontrar los archivos escritos en go
-
->$sudo gedit ~/.profile
-
- - Agregar esta linea al final del archivo para agregar go al path:
-
-export GOROOT=/usr/local/go
-export GOPATH=$HOME/Observatorio  #ruta a la carpeta donde clonaron el repositorio
-export PATH=$GOPATH/bin:$GOROOT/bin:$PATH
-
- - Ejecutar el comando siguiente para refrescar el perfil:
-
->$source ~/.profile
+- Clonar el repositorio
+- Setear GOPATH y GOROOT: seguir instrucciones de la documentación de go. Setear el gopath en la ruta donde está la carpeta Obstervatorio (la carpeta de este repositorio)
 
 - Instalar Librerías y dependencias
-	1. Librería DNS
+
+1. Librería DNS
 
 >$ go get github.com/miekg/dns
 
 >$ go build github.com/miekg/dns
 
-2. Librería geoip
+2. Librería geoip2
 
 >$ sudo apt install libgeoip1 libgeoip-dev geoip-bin
 
->$ go get github.com/abh/geoip
+>$ go get github.com/oschwald/geoip2-golang
 
-	3. Librería postgresql
+3. Librería postgresql
 
 >$ go get github.com/lib/pq
 
-4. Librería password
+4. Librería para leer archivo de configuracion yml 
 
->$ go get "github.com/howeyc/gopass"
+>$ go get gopkg.in/yaml.v2
+
 
 
 - Configurar postgresql
@@ -66,26 +52,15 @@ export PATH=$GOPATH/bin:$GOROOT/bin:$PATH
 - Obtener datos geográficos:
 
 >$ wget -N -i ~/Observatorio/Utils/geoip_url_list.txt  #agregar ruta a Observatorio
-
 >$ mkdir /usr/share/GeoIP
-
 >$ gunzip GeoIP.dat.gz
-
 >$ mv GeoIP.dat /usr/share/GeoIP/
-
 >$ gunzip GeoIPv6.dat.gz
-
 >$ mv GeoIPv6.dat /usr/share/GeoIP/
-
 >$ gunzip GeoIPASNum.dat.gz
-
 >$ mv GeoIPASNum.dat /usr/share/GeoIP/
-
 >$ gunzip GeoIPASNumv6.dat.gz
-
 >$ mv GeoIPASNumv6.dat /usr/share/GeoIP/
-
-
 https://download.maxmind.com/app/geoip_download?edition_id=GeoLite2-ASN&license_key=YOUR_LICENSE_KEY&suffix=tar.gz
 
 
@@ -152,11 +127,6 @@ con los siguientes argumentos:
 
 go get github.com/miekg/dns
 go get github.com/lib/pq
-go get github.com/howeyc/gopass
 
 sudo apt-get install libgeoip-dev    # or 'brew install pkg-config'
 go get github.com/abh/geoip
-
-go get github.com/niclabs/Observatorio/utils
-go get github.com/niclabs/Observatorio/dnsUtils
-go get github.com/niclabs/Observatorio/dbController

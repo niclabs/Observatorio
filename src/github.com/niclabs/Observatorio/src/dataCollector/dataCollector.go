@@ -37,18 +37,19 @@ var weird_string_subdomain_name = "zskldhoisdh123dnakjdshaksdjasmdnaksjdh";//pot
 var dns_client *dns.Client;
 
 
-func InitCollect(dont_probe_file_name string , drop bool, user string, password string, dbname string){
+func InitCollect(dont_probe_file_name string , drop bool, user string, password string, dbname string, geoipdb *geoIPUtils.GeoipDB, dnsServers []string)(error){
 	//check Dont probelist file
 	dontProbeList = InitializeDontProbeList(dont_probe_file_name)
 
 	//Init geoip
-	geoip_country_db, geoip_asn_db = geoIPUtils.InitGeoIP()	
+	geoip_country_db = geoipdb.Country_db	
+	geoip_asn_db = geoipdb.Asn_db
 
 	//initialize database (create tables if not created already and drop database if indicated)
 	database, err := sql.Open("postgres", "user="+user+" password="+password+" dbname="+dbname+" sslmode=disable")
 	if err != nil {
-		fmt.Println(err)
-		return
+		fmt.Println(err.Error())
+		return err
 	}
 	dbController.CreateTables(database, drop)
 	database.Close()
@@ -58,12 +59,18 @@ func InitCollect(dont_probe_file_name string , drop bool, user string, password 
 	fmt.Println("num CPU:",runtime.NumCPU())
 	
 	//obtain config default dns servers
-	config, _ := dns.ClientConfigFromFile("/etc/resolv.conf")
-	config_servers = config.Servers 
+	//config, _ := dns.ClientConfigFromFile("/etc/resolv.conf")
+	config_servers = dnsServers//config.Servers
 
+	//dns client to use in future queries.
 	dns_client = new(dns.Client)
 
+	return nil //no error.
 
+}
+
+func EndCollect(){
+	fmt.Println("End collect. nothing yet... delete this(?)")
 }
 
 func InitializeDontProbeList(dpf string)(dontProbeList  []*net.IPNet ){
@@ -106,14 +113,14 @@ func StartCollect(input string, c int, dbname string, user string, password stri
 	debug = debug_bool
 	
 	/*Collect data*/
-	collect(database, input, run_id)
+	createCollectorRoutines(database, input, run_id)
 
 	fmt.Println("TotalTime(nsec):", total_time ," (sec) ", total_time/1000000000," (min:sec) ", total_time/60000000000,":",total_time%60000000000/1000000000)
 
 	database.Close()
 }
 
-func collect(db *sql.DB, inputFile string, run_id int){
+func createCollectorRoutines(db *sql.DB, inputFile string, run_id int){
 	start_time:=time.Now()
 
 	fmt.Println("EXECUTING WITH ", concurrency , " GOROUTINES;")
@@ -124,6 +131,7 @@ func collect(db *sql.DB, inputFile string, run_id int){
 		return
 	}
 
+	//CREATES THE ROUTINES
 	domains_queue := make(chan string, concurrency)
 	wg := sync.WaitGroup{}
 	wg.Add(concurrency)
@@ -133,7 +141,7 @@ func collect(db *sql.DB, inputFile string, run_id int){
 			j:=0
 			for domain_name := range domains_queue {
 				//t2:=time.Now()
-				collectDomainInfo(domain_name, run_id, db)
+				collectSingleDomainInfo(domain_name, run_id, db)
 				//duration := time.Since(t2)
 				j++
 			}
@@ -142,7 +150,7 @@ func collect(db *sql.DB, inputFile string, run_id int){
 	}
 
 
-	/*fill the queue with data to obtain*/
+	//fill the queue with data to obtain
 	for _, domain_name := range domains_list {
 		domain_name := dns.Fqdn(domain_name)
 		domains_queue <- domain_name
@@ -373,19 +381,14 @@ func getAndSaveDS(domain_name string, servers []string, domain_id int, run_id in
 		}
 	}
 
-func getAndSaveDNSKEYs(domain_name string, servers []string, domain_id int, run_id int, db *sql.DB)(dnskey_found bool){
+func getAndSaveDNSKEYs(dnskey_rrs *dns.Msg, domain_name string, servers []string, domain_id int, run_id int, db *sql.DB)(dnskey_found bool){
+	fmt.Println("getAndSaveDNSKEYs")
 	dnskey_found = true
-	domain_dnskeys, _, err := dnsUtils.GetRecordSetWithDNSSEC(domain_name, dns.TypeDNSKEY, servers, dns_client)
-	if(err != nil){
-		manageError(err.Error())
-		return false
-	}
-	//var dnskey_rrset []dns.RR
-	for _, dnskey := range domain_dnskeys.Answer {
+	for _, dnskey := range dnskey_rrs.Answer {
 		if dnskey1, ok := dnskey.(*dns.DNSKEY); ok {
 			dnskey_found = true
 			//dnskey_rrset = append(dnskey_rrset,dnskey1)
-			dbController.SaveDNSKEY(dnskey1, false, domain_id, run_id, db) //TODO change second argument always false....
+			dbController.SaveDNSKEY(dnskey1, domain_id, run_id, db)
 			/* do this in analysis
 			dnskey_ds_ok = false;
 			if(dnskey1.Flags&1 == 1){ //SEP (Secure Entry Point)
@@ -406,7 +409,7 @@ func getAndSaveDNSKEYs(domain_name string, servers []string, domain_id int, run_
 		}
 	}
 	//get and save DNSKEY RRSIGS
-	rrsigs := domain_dnskeys
+	rrsigs := dnskey_rrs
 	for _, rrsig := range rrsigs.Answer {
 		if rrsig1, ok := rrsig.(*dns.RRSIG); ok {
 			if(rrsig1.TypeCovered!=dns.TypeDNSKEY){
@@ -573,21 +576,26 @@ func getAndSaveNSECinfo(domain_name string, servers []string, domain_id int, run
 
 func getAndSaveDNSSECinfo(domain_name string, domain_name_servers []string, domain_id int, run_id int, db *sql.DB)(dnskey_found bool){
 
-	domain_dnskeys, _, err := dnsUtils.GetRecordSetWithDNSSEC(domain_name, dns.TypeDNSKEY, domain_name_servers, dns_client)
+	// Get DNSKEYS
+	dnskey_rrs, _, err := dnsUtils.GetRecordSetWithDNSSEC(domain_name, dns.TypeDNSKEY, domain_name_servers, dns_client)
 	dnskey_found = false
-	
 	if (err != nil) {
 		manageError(strings.Join([]string{"dnskey", domain_name, err.Error()}, ""))
 		return dnskey_found
 	} 
-	if (len(domain_dnskeys.Answer) == 0) {
+	if (len(dnskey_rrs.Answer) == 0) {
 		return dnskey_found
 	}
+
+	//if any dnskey found, continue... else return (above)
+	dnskey_found = getAndSaveDNSKEYs(dnskey_rrs, domain_name, domain_name_servers, domain_id , run_id , db)
+
+	
 	//DSok := false
 	//dnskey_ds_ok := false
 	//var ds_rrset []dns.RR;
 	getAndSaveDS(domain_name, config_servers, domain_id , run_id , db)
-	dnskey_found = getAndSaveDNSKEYs(domain_name, domain_name_servers, domain_id , run_id , db)
+
 	dbController.UpdateDomainDNSKEYInfo(domain_id, dnskey_found, false, db)//TODO update this, second argument always false
 
 
@@ -597,11 +605,10 @@ func getAndSaveDNSSECinfo(domain_name string, domain_name_servers []string, doma
 }
 
 
-
-func collectDomainInfo(domain_name string, run_id int, db *sql.DB) {
+// Collects info from a single domain (ran by a routine) and save it to the databses.
+func collectSingleDomainInfo(domain_name string, run_id int, db *sql.DB) {
 	
 	var domain_id int
-
 	// Create domain and save it in database
 	domain_id = dbController.SaveDomain(domain_name, run_id, db)
 
@@ -678,12 +685,10 @@ func collectDomainInfo(domain_name string, run_id int, db *sql.DB) {
 		
 		//Get A and AAAA records
 		getAndSaveDomainIPv4(domain_name, domain_name_servers, domain_id, run_id, db)
-		getAndSaveDomainIPv6(domain_name, domain_name_servers, domain_id, run_id, db)
-			
-
+		getAndSaveDomainIPv6(domain_name, domain_name_servers, domain_id, run_id, db)		
 		// Check SOA record
 		getAndSaveDomainSOA(domain_name, domain_name_servers, domain_id, run_id, db)
-		
+		// Get DNSSEC info
 		getAndSaveDNSSECinfo(domain_name, domain_name_servers, domain_id, run_id, db)
 	}
 

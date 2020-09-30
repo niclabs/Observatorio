@@ -1,15 +1,25 @@
+#Geoip data
+#Reminder: use spaces, yaml doesn't allow tabs
+geoip:
+    geoippath: Geolite
+    geoipasnfilename: GeoLite2-ASN.mmdb
+    geoipcountryfilename: GeoLite2-Country.mmdb
+    geoipupdatescript: UpdateGeoliteDatabases.sh
+
 # Database configurations
 database:
-  dbname: "observatorio"
-  user: "obslac"
-  pass: "password"
+    dbname: observatorio
+    dbuser: obslac
+    dbpass: password
 
 #runing arguments
 runargs:
-  inputfilepath: "input-example.txt"
-  dontprobefilepath: ""
-  concurrency: 100
-  ccmax: 100
-  maxretry: 2
-  dropdatabase: false
-  debug: false
+    inputfilepath: input-example.txt
+    dontprobefilepath: dontprobefile.txt
+    concurrency: 100
+    ccmax: 100
+    maxretry: 2
+    dropdatabase: false
+    debug: false
+    dnsservers: ["8.8.8.8"]
+#End of config data

@@ -8,37 +8,44 @@ import (
 	"time"
 	"net"
 	"github.com/oschwald/geoip2-golang"
+	"strconv"
 )
 
 
-var GEOIP_path string = "./Geolite/" // "/usr/share/GeoIP"
-var GEOIP_country_name string = "GeoLite2-Country.mmdb"
-var GEOIP_ASN_name string = "GeoLite2-ASN.mmdb"
-var Get_GeoIP_script_path string = "scripts/getGeoIp.sh"
+//var GEOIP_path string = "Geolite/" // "/usr/share/GeoIP"
+//var GEOIP_country_name string = "GeoLite2-Country.mmdb"
+//var GEOIP_ASN_name string = "GeoLite2-ASN.mmdb"
+//var Get_GeoIP_script_path string = "UpdateGeoliteDatabases.sh"
+
+type GeoipDB struct {  
+    Country_db *geoip2.Reader
+    Asn_db     *geoip2.Reader
+}
 
 // Initialize GEO IP databases
-func InitGeoIP()(gi_country_db *geoip2.Reader, gi_asn_db *geoip2.Reader) {
+func InitGeoIP(geoip_path string, geoip_country_db_name string, geoip_asn_db_name string, geoip_update_script string)(*GeoipDB) {
 	var err error
-	checkDatabases()
-
-	gi_country_db,err = getGeoIpCountryDB()
+	checkDatabases(geoip_path, geoip_country_db_name, geoip_asn_db_name, geoip_update_script)
+	gi_country_db,err := getGeoIpCountryDB(geoip_path+"/"+geoip_country_db_name)
 	if(err!=nil) {
 		fmt.Println(err.Error())
 	}
-
-
-	gi_asn_db, err = getGeoIpAsnDB()
+	gi_asn_db, err := getGeoIpAsnDB(geoip_path+"/"+geoip_asn_db_name)
 	if(err!=nil) {
 		fmt.Println(err.Error())
 	}
-
-
-	return gi_country_db, gi_asn_db
-
+	geoip_db := &GeoipDB{gi_country_db, gi_asn_db}
+	return geoip_db
 }
-func downloadGeoIp()(bool){
+
+func CloseGeoIP(geoipDB *GeoipDB){
+	geoipDB.Country_db.Close();
+	geoipDB.Asn_db.Close();
+}
+
+func downloadGeoIp(geoip_update_script string)(bool){
 	
-	cmd := exec.Command("/bin/sh", Get_GeoIP_script_path)
+	cmd := exec.Command("/bin/sh", geoip_update_script)
 	var out bytes.Buffer
 	cmd.Stdout = &out
 	err := cmd.Stderr
@@ -53,42 +60,42 @@ func downloadGeoIp()(bool){
 }
 
 //Checks if databases exists, if exists, check if they are updated, return (bool)databases_found and (bool)databases_updated
-func checkDatabases() ( bool , bool){
-	file := GEOIP_path + GEOIP_country_name
+func checkDatabases(geoip_path string, geoip_country_db_name string, geoip_asn_db_name string, geoip_update_script string) ( bool , bool){
+	go_again := true
+	file := geoip_path + geoip_country_db_name
 	databases_found := false
 	databases_updated := false
+	checkdb:
 	if file_info, err := os.Stat(file); err == nil {
 		databases_found = true
 		if(time.Now().After(file_info.ModTime().AddDate(0,1,0))){
-			fmt.Println("Bases de Dato de GeoIP NO Actualizadas")
-			//TODO request to update
-			/*
-			got := downloadGeoIp()
-			if (!got) {
-				return
+			fmt.Println("not updated geoip databases")
+		}else{
+			fmt.Println("geoipDBs ok!!")	
+			databases_updated = true
+			if go_again{
+				go_again = false
+				file = geoip_path + geoip_asn_db_name
+				goto checkdb//now check asn db
 			}
-			*/
-		}else{
-			databases_updated = true
+			return databases_found, databases_updated
 		}
+	}
+	fmt.Println("Updating geoip databases")
+	got := downloadGeoIp(geoip_update_script)
+	fmt.Println("Attempting to Download databases")
+	if (!got) {
+		fmt.Println("Attempting to Download failed!! :( ")
 	}else{
-		fmt.Println("no GeoIP database found")
-		got := downloadGeoIp()
-		fmt.Println("Attempting to Download databases")
-		if (!got) {
-			fmt.Println("Attempting to Download failed!!")
-		}else{
-			fmt.Println("Attempting to Download Succeded!!")
-			databases_found = true
-			databases_updated = true
-		}
+		fmt.Println("Attempting to Download Succeded!!")
+		databases_found = true
+		databases_updated = true
 	}
 	return databases_found, databases_updated
 }
 
 // Finds and return the Country database
-func getGeoIpCountryDB()(*geoip2.Reader,error) {
-	file := GEOIP_path + GEOIP_country_name
+func getGeoIpCountryDB(file string)(*geoip2.Reader,error) {
 	gi, err := geoip2.Open(file)
 	if err != nil {
 		fmt.Printf("Could not open GeoLite2-Country database: %s\n", err)
@@ -99,8 +106,7 @@ func getGeoIpCountryDB()(*geoip2.Reader,error) {
 }
 
 // Finds and return the ASN database
-func getGeoIpAsnDB()(*geoip2.Reader,error){
-	file := GEOIP_path + GEOIP_ASN_name
+func getGeoIpAsnDB(file string)(*geoip2.Reader,error){
 	gi, err := geoip2.Open(file)
 	if err != nil {
 		fmt.Printf("Could not open GeoLite2-ASN database: %s\n", err)
@@ -127,7 +133,7 @@ func GetIPCountry(ip string, gi_country_db *geoip2.Reader )(country string){
 func GetIPASN(ip string, gi_asn_db *geoip2.Reader )(asn string){
 	ip_addr := net.ParseIP(ip)
 	var asnum,_ = gi_asn_db.ASN(ip_addr)
-	asn = fmt.Sprint(asnum.AutonomousSystemNumber)
+	asn = strconv.FormatUint(uint64(asnum.AutonomousSystemNumber), 10)
 	return asn
 }
 

@@ -71,7 +71,6 @@ func CreateTables(db *sql.DB, drop bool){
 		fmt.Println("OpenConnections",db.Stats())
 		panic(err)
 	}
-
 }
 func DropTable(table string, db *sql.DB, drop bool) {
 	if (drop) {
@@ -82,8 +81,6 @@ func DropTable(table string, db *sql.DB, drop bool) {
 		}
 	}
 }
-
-
 func NewRun(db *sql.DB)(int){
 	var run_id int;
 	err := db.QueryRow("INSERT INTO runs(tstmp) VALUES($1) RETURNING id", time.Now()).Scan(&run_id)
@@ -126,8 +123,8 @@ func SaveSoa(soa bool, domainid int, db *sql.DB){
 		panic(err)
 	}
 }
-func SaveDNSKEY(dnskey *dns.DNSKEY, DSok bool, domain_id int, run_id int, db *sql.DB){
-	_, err := db.Exec("INSERT INTO dnskey(domain_id, public_key, owner, ttl, type, protocol, algorithm, keytag, DSok, run_id)VALUES($1, $2, $3, $4, $5, $6, $7, $8,$9, $10)",domain_id, dnskey.PublicKey, dnskey.Hdr.Name, dnskey.Hdr.Ttl, dnskey.Hdr.Rrtype, dnskey.Protocol, dnskey.Algorithm, dnskey.KeyTag(),DSok, run_id)
+func SaveDNSKEY(dnskey *dns.DNSKEY, domain_id int, run_id int, db *sql.DB){
+	_, err := db.Exec("INSERT INTO dnskey(domain_id, public_key, owner, ttl, type, protocol, algorithm, keytag, run_id)VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9)",domain_id, dnskey.PublicKey, dnskey.Hdr.Name, dnskey.Hdr.Ttl, dnskey.Hdr.Rrtype, dnskey.Protocol, dnskey.Algorithm, dnskey.KeyTag(), run_id)
 	if err != nil {
 		fmt.Println("OpenConnections",db.Stats()," DomainId: ",domain_id)
 		panic(err)
@@ -363,7 +360,6 @@ func CountDomainsWithCountNSIPExclusive(run_id int, db *sql.DB)(*sql.Rows, error
 		"JOIN (SELECT nameserver_id, COUNT(ip) AS ipCount, SUM(CASE family(ip) WHEN 4 THEN 1 ELSE 0 END) AS ipv4Count, SUM(CASE family(ip) WHEN 6 THEN 1 ELSE 0 END) AS ipv6Count FROM (select * from nameserver_ip where run_id=$1) as nameserver_ip GROUP BY(nameserver_id)) AS IPC " +
 		"ON nameserver1.id=IPC.nameserver_id) GROUP BY domain_id)AS CDN GROUP BY ipsCount, ipsv4Count, ipsv6Count ORDER BY ipsCount, ipsv4Count, ipsv6Count) AS familyCount)as groupFamily GROUP BY family;", run_id)
 	return rows,err
-
 }
 func GetRunTimestamp(run_id int, db *sql.DB)(string) {
 	var ts string;
@@ -373,7 +369,6 @@ func GetRunTimestamp(run_id int, db *sql.DB)(string) {
 		panic(err)
 	}
 	return ts
-
 }
 func CountDomainsWithDNSSEC(run_id int, db *sql.DB)(dnssec_wrong int, dnssec_ok int, no_dnssec int){
 	err := db.QueryRow("" +
@@ -385,7 +380,6 @@ func CountDomainsWithDNSSEC(run_id int, db *sql.DB)(dnssec_wrong int, dnssec_ok 
 	return 0,0,0
 	}
 	return
-
 }
 func CountDomainsWithDNSSECErrors(run_id int, db *sql.DB)(denial_proof int, dnskey_validation int, ds_validation int) {
 	query := `SELECT Denial.count as denial_proof, DNSKEY.count AS dnskey_validation, DS.count AS ds_validation from
@@ -421,5 +415,4 @@ func CountNameserverCharacteristics(run_id int, db *sql.DB)(recursivity int, no_
 		    SUM(CASE WHEN zone_transfer = false then 1 ELSE 0 END) as no_zone_transfer, SUM(CASE WHEN zone_transfer = true then 1 ELSE 0 END)  as zone_transfer,
 		    SUM(CASE WHEN loc_query = false then 1 ELSE 0 END) as no_loc_query, SUM(CASE WHEN loc_query = true then 1 ELSE 0 END)  as loc_query
 		from (select * from nameserver where run_id=$1 and response=true) as NS;`
-
 }*/
