@@ -3,18 +3,14 @@ package main
 import (
 	"database/sql"
 	_ "github.com/lib/pq"
-	"github.com/niclabs/Observatorio/src/dbController"
-	//"github.com/miekg/dns"
+	"github.com/niclabs/Observatorio/dbController"
 	"fmt"
 	"log"
 	"sync"
 	"time"
-	//	"github.com/maitegm/dnsUtils"
 	"encoding/csv"
 	"os"
 	"strconv"
-	//"flag"
-	//"github.com/howeyc/gopass"
 	"gopkg.in/yaml.v2"
 )
 

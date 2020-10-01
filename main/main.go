@@ -2,8 +2,8 @@ package main
 
 import (
 	"fmt"
-	"github.com/niclabs/Observatorio/src/dataCollector"
-	"github.com/niclabs/Observatorio/src/geoIPUtils"
+	"github.com/niclabs/Observatorio/dataCollector"
+	"github.com/niclabs/Observatorio/geoIPUtils"
 	"gopkg.in/yaml.v2"
 	"os"
 )

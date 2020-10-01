@@ -1,30 +1,51 @@
 # Start from the latest golang base image
 FROM golang:latest
 
-ENV GOOS=linux\
-	GOARCH=amd64
+ENV GO111MODULE=on \
+    CGO_ENABLED=0 \
+    GOOS=linux \
+    GOARCH=amd64
 
-WORKDIR /github.com/niclabs/Observatorio
+#WORKDIR /github.com/niclabs/Observatorio/
 
+#ADD . /github.com/niclabs/Observatorio/
+
+# Postgres
+#EXPOSE 5432
+# Download all the dependencies
+#RUN go get github.com/miekg/dns
+#RUN go get github.com/oschwald/geoip2-golang
+#RUN go get github.com/lib/pq
+#RUN go get gopkg.in/yaml.v2
+
+# Build the dns package
+#RUN go build github.com/miekg/dns
+
+#CMD ["go", "run", "main/main.go"]
+
+
+WORKDIR $GOPATH/src/github.com/niclabs/Observatorio
+
+# Copy and download dependency using go mod
+COPY go.mod .
+COPY go.sum .
+RUN go mod download
+
+# Copy the code into the container
 COPY . .
 
-# Get dependencies
-RUN apt update
+# Build the application
+#RUN go build -o main .
 
-RUN apt install -y libgeoip-dev 
-#libgeoip1  geoip-bin
+# Move to /dist directory as the place for resulting binary folder
+#WORKDIR /dist
 
-# Create database	
-RUN apt-get install -y postgresql
-USER postgres
-RUN /etc/init.d/postgresql start &&\
-	psql --command "CREATE USER obslac WITH SUPERUSER PASSWORD 'password';" &&\
-    createdb -O obslac observatorio
+# Copy binary from build to main folder
+#RUN cp $GOPATH/src/github.com/niclabs/Observatorio/main .
 
-USER root
+# Export necessary port
+EXPOSE 5432
 
-RUN go build -o main ./src/main
-
-CMD ["./main"]
-
-
+# Command to run when starting the container
+##CMD ["/dist/main"]
+CMD ["go", "run", "main/main.go"]
