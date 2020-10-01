@@ -10,17 +10,12 @@ import (
 	"os"
 	"strconv"
 	"strings"
-	//"github.com/maitegm/dataCollector"
 	"github.com/miekg/dns"
-	//"math/rand"
 	"bytes"
 	"os/exec"
 	"sync"
 	"time"
-	//"regexp"
-	//"github.com/abh/geoip"
 	"github.com/oschwald/geoip2-golang"
-	//"github.com/abh/geoip"
 )
 
 var giasn *geoip2.Reader
@@ -187,14 +182,14 @@ func lookForResolver(ip string) {
 
 			/*get asn*/
 			asn := ""
-			asn_name := ""
-			ip_net := net.ParseIP(ip)
-			record, err := giasn.ASN(ip_net)
+			asnName := ""
+			ipNet := net.ParseIP(ip)
+			record, err := giasn.ASN(ipNet)
 			if err != nil {
 				fmt.Println("error", err)
 			} else {
 				asn = strings.Join([]string{"ASN", strconv.Itoa(int(record.AutonomousSystemNumber))}, "")
-				asn_name = strings.Replace(record.AutonomousSystemOrganization, ",", "", -1)
+				asnName = strings.Replace(record.AutonomousSystemOrganization, ",", "", -1)
 			}
 			/*if(as != ""){
 				fmt.Println(as)
@@ -210,15 +205,15 @@ func lookForResolver(ip string) {
 			msg2, _, err := c.Exchange(m2, ip+":53")
 			if err != nil {
 				//fmt.Println(err.Error())
-				fmt.Println(ip, ", ,", name, ",", asn, ",", asn_name, ",", data) //, msg)
+				fmt.Println(ip, ", ,", name, ",", asn, ",", asnName, ",", data) //, msg)
 			} else {
 				if len(msg2.Answer) >= 1 {
 					//r := regexp.MustCompile("[^\\]+")
 					version := strings.Split(msg2.Answer[0].String(), "\"")[1]
 					version = strings.Replace(version, ",", "", -1) //r.FindAllString(msg2.Answer[0].String(), -1)[4]
-					fmt.Println(ip, ",", version, ",", name, ",", asn, ",", asn_name, ",", data)
+					fmt.Println(ip, ",", version, ",", name, ",", asn, ",", asnName, ",", data)
 				} else {
-					fmt.Println(ip, ", ,", name, ",", asn, ",", asn_name, ",", data)
+					fmt.Println(ip, ", ,", name, ",", asn, ",", asnName, ",", data)
 				}
 			}
 

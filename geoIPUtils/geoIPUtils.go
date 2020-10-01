@@ -17,34 +17,34 @@ import (
 //var Get_GeoIP_script_path string = "UpdateGeoliteDatabases.sh"
 
 type GeoipDB struct {
-	Country_db *geoip2.Reader
-	Asn_db     *geoip2.Reader
+	CountryDb *geoip2.Reader
+	AsnDb     *geoip2.Reader
 }
 
 // Initialize GEO IP databases
-func InitGeoIP(geoip_path string, geoip_country_db_name string, geoip_asn_db_name string, geoip_update_script string) *GeoipDB {
+func InitGeoIP(geoipPath string, geoipCountryDbName string, geoipAsnDbName string, geoipUpdateScript string) *GeoipDB {
 	var err error
-	checkDatabases(geoip_path, geoip_country_db_name, geoip_asn_db_name, geoip_update_script)
-	gi_country_db, err := getGeoIpCountryDB(geoip_path + "/" + geoip_country_db_name)
+	checkDatabases(geoipPath, geoipCountryDbName, geoipAsnDbName, geoipUpdateScript)
+	giCountryDb, err := getGeoIpCountryDB(geoipPath + "/" + geoipCountryDbName)
 	if err != nil {
 		fmt.Println(err.Error())
 	}
-	gi_asn_db, err := getGeoIpAsnDB(geoip_path + "/" + geoip_asn_db_name)
+	giAsnDb, err := getGeoIpAsnDB(geoipPath + "/" + geoipAsnDbName)
 	if err != nil {
 		fmt.Println(err.Error())
 	}
-	geoip_db := &GeoipDB{gi_country_db, gi_asn_db}
-	return geoip_db
+	geoipDb := &GeoipDB{giCountryDb, giAsnDb}
+	return geoipDb
 }
 
 func CloseGeoIP(geoipDB *GeoipDB) {
-	geoipDB.Country_db.Close()
-	geoipDB.Asn_db.Close()
+	geoipDB.CountryDb.Close()
+	geoipDB.AsnDb.Close()
 }
 
-func downloadGeoIp(geoip_update_script string) bool {
+func downloadGeoIp(geoipUpdateScript string) bool {
 
-	cmd := exec.Command("/bin/sh", geoip_update_script)
+	cmd := exec.Command("/bin/sh", geoipUpdateScript)
 	var out bytes.Buffer
 	cmd.Stdout = &out
 	err := cmd.Stderr
@@ -59,38 +59,38 @@ func downloadGeoIp(geoip_update_script string) bool {
 }
 
 //Checks if databases exists, if exists, check if they are updated, return (bool)databases_found and (bool)databases_updated
-func checkDatabases(geoip_path string, geoip_country_db_name string, geoip_asn_db_name string, geoip_update_script string) (bool, bool) {
-	go_again := true
-	file := geoip_path + geoip_country_db_name
-	databases_found := false
-	databases_updated := false
+func checkDatabases(geoipPath string, geoipCountryDbName string, geoipAsnDbName string, geoipUpdateScript string) (bool, bool) {
+	goAgain := true
+	file := geoipPath + geoipCountryDbName
+	databasesFound := false
+	databasesUpdated := false
 checkdb:
-	if file_info, err := os.Stat(file); err == nil {
-		databases_found = true
-		if time.Now().After(file_info.ModTime().AddDate(0, 1, 0)) {
+	if fileInfo, err := os.Stat(file); err == nil {
+		databasesFound = true
+		if time.Now().After(fileInfo.ModTime().AddDate(0, 1, 0)) {
 			fmt.Println("not updated geoip databases")
 		} else {
 			fmt.Println("geoipDBs ok!!")
-			databases_updated = true
-			if go_again {
-				go_again = false
-				file = geoip_path + geoip_asn_db_name
+			databasesUpdated = true
+			if goAgain {
+				goAgain = false
+				file = geoipPath + geoipAsnDbName
 				goto checkdb //now check asn db
 			}
-			return databases_found, databases_updated
+			return databasesFound, databasesUpdated
 		}
 	}
 	fmt.Println("Updating geoip databases")
-	got := downloadGeoIp(geoip_update_script)
+	got := downloadGeoIp(geoipUpdateScript)
 	fmt.Println("Attempting to Download databases")
 	if !got {
 		fmt.Println("Attempting to Download failed!! :( ")
 	} else {
 		fmt.Println("Attempting to Download Succeded!!")
-		databases_found = true
-		databases_updated = true
+		databasesFound = true
+		databasesUpdated = true
 	}
-	return databases_found, databases_updated
+	return databasesFound, databasesUpdated
 }
 
 // Finds and return the Country database
@@ -116,9 +116,9 @@ func getGeoIpAsnDB(file string) (*geoip2.Reader, error) {
 }
 
 // Finds and returns the conuntry of the given ip
-func GetIPCountry(ip string, gi_country_db *geoip2.Reader) (country string) {
-	ip_addr := net.ParseIP(ip)
-	var ctry, err = gi_country_db.Country(ip_addr)
+func GetIPCountry(ip string, giCountryDb *geoip2.Reader) (country string) {
+	ipAddr := net.ParseIP(ip)
+	var ctry, err = giCountryDb.Country(ipAddr)
 	if err != nil {
 		fmt.Printf("Could not get country: %s\n", err)
 		return ""
@@ -128,9 +128,9 @@ func GetIPCountry(ip string, gi_country_db *geoip2.Reader) (country string) {
 }
 
 // Finds and returns the ASN of the given ip
-func GetIPASN(ip string, gi_asn_db *geoip2.Reader) (asn string) {
-	ip_addr := net.ParseIP(ip)
-	var asnum, _ = gi_asn_db.ASN(ip_addr)
+func GetIPASN(ip string, giAsnDb *geoip2.Reader) (asn string) {
+	ipAddr := net.ParseIP(ip)
+	var asnum, _ = giAsnDb.ASN(ipAddr)
 	asn = strconv.FormatUint(uint64(asnum.AutonomousSystemNumber), 10)
 	return asn
 }

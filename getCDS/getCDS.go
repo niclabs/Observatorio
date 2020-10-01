@@ -46,10 +46,10 @@ func readLines(path string) ([]string, error) {
 }
 
 /*code that executes each routine*/
-func getCDSInfo(domain_name string, run_id int, config *dns.ClientConfig, db *sql.DB) {
+func getCDSInfo(domainName string, runId int, config *dns.ClientConfig, db *sql.DB) {
 	c := new(dns.Client)
 	msg := new(dns.Msg)
-	msg.SetQuestion(domain_name, dns.TypeCDS)
+	msg.SetQuestion(domainName, dns.TypeCDS)
 	records, _, error := c.Exchange(msg, config.Servers[0]+":53")
 	if error != nil {
 		fmt.Println(error)
@@ -60,7 +60,7 @@ func getCDSInfo(domain_name string, run_id int, config *dns.ClientConfig, db *sq
 				dg := record.(*dns.CDS).Digest
 				kt := record.(*dns.CDS).KeyTag
 				al := record.(*dns.CDS).Algorithm
-				r := []string{domain_name, strconv.Itoa(int(kt)), strconv.Itoa(int(al)), strconv.Itoa(int(dt)), dg}
+				r := []string{domainName, strconv.Itoa(int(kt)), strconv.Itoa(int(al)), strconv.Itoa(int(dt)), dg}
 				err = csvWriter.Write(r)
 				if err != nil {
 					fmt.Println(err)
@@ -76,14 +76,14 @@ func getCDSInfo(domain_name string, run_id int, config *dns.ClientConfig, db *sq
 }
 
 /*dispatcher of routines*/
-func DispatchCollectors(db *sql.DB, input_file string, run_id int, debug_var bool, concurrency int) {
-	debug = debug_var
+func DispatchCollectors(db *sql.DB, inputFile string, runId int, debugVar bool, concurrency int) {
+	debug = debugVar
 	t := time.Now()
 
-	fmt.Println("input file: ", input_file)
-	writeToResultsFile("input file: " + input_file)
+	fmt.Println("input file: ", inputFile)
+	writeToResultsFile("input file: " + inputFile)
 
-	lines, err := readLines(input_file)
+	lines, err := readLines(inputFile)
 	if err != nil {
 		fmt.Println(err.Error())
 	}
@@ -98,14 +98,14 @@ func DispatchCollectors(db *sql.DB, input_file string, run_id int, debug_var boo
 	wg.Add(concurrency)
 	/*Init n routines to read the queue*/
 	for i := 0; i < concurrency; i++ {
-		go func(run_id int) {
+		go func(runId int) {
 			j := 0
 			for line := range getDataQueue {
-				getCDSInfo(line, run_id, config, db)
+				getCDSInfo(line, runId, config, db)
 				j++
 			}
 			wg.Done()
-		}(run_id)
+		}(runId)
 	}
 	/*fill the queue with data to obtain*/
 	for _, line := range lines {
@@ -119,9 +119,9 @@ func DispatchCollectors(db *sql.DB, input_file string, run_id int, debug_var boo
 
 	/*Collection finished!!*/
 	TotalTime = (int)(time.Since(t).Nanoseconds())
-	dbController.SaveCorrectRun(run_id, TotalTime, true, db)
-	fmt.Println("Successful Run. run_id:", run_id)
-	writeToResultsFile("Successful Run. run_id: " + strconv.Itoa(run_id))
+	dbController.SaveCorrectRun(runId, TotalTime, true, db)
+	fmt.Println("Successful Run. run_id:", runId)
+	writeToResultsFile("Successful Run. run_id: " + strconv.Itoa(runId))
 	db.Close()
 }
 func initResultsFile() {
@@ -172,7 +172,7 @@ func closeCSV() {
 	csvFile.Close()
 }
 
-func collectCDS(inputfile string, concurrency int, ccmax int, max_retry int, dropdatabase bool, database string, user string, password string, debug bool) {
+func collectCDS(inputfile string, concurrency int, ccmax int, maxRetry int, dropdatabase bool, database string, user string, password string, debug bool) {
 
 }
 
@@ -183,7 +183,7 @@ func main() {
 	initCSV()
 
 	Drop = *dropDatabase
-	var retry int = 0 //initial retry
+	var retry = 0 //initial retry
 	db, err := sql.Open("postgres", "user="+*user+" password="+password+" dbname="+*database+" sslmode=disable")
 	if err != nil {
 		fmt.Println(err)
@@ -203,9 +203,9 @@ func main() {
 			fmt.Println("EXECUTING WITH ", concurrency, " GOROUTINES; retry: ", retry)
 			writeToResultsFile("EXECUTING WITH " + strconv.Itoa(*concurrency) + " GOROUTINES; retry: " + strconv.Itoa(retry))
 
-			run_id := NewRun(db)
+			runId := NewRun(db)
 			/*Collect data*/
-			DispatchCollectors(db, *inputFile, run_id, *debug, *concurrency)
+			DispatchCollectors(db, *inputFile, runId, *debug, *concurrency)
 
 			fmt.Println("TotalTime(nsec):", TotalTime, " (sec) ", TotalTime/1000000000, " (min:sec) ", TotalTime/60000000000, ":", TotalTime%60000000000/1000000000)
 			writeToResultsFile("TotalTime(nsec):" + strconv.Itoa(TotalTime) + " (sec) " + strconv.Itoa(TotalTime/1000000000) + " (min:sec) " + strconv.Itoa(TotalTime/60000000000) + ":" + strconv.Itoa(TotalTime%60000000000/1000000000))
@@ -225,11 +225,11 @@ func main() {
 }
 
 //usage: -i=input-file -c=100 -u=user -pw=pass -db=database
-func readArguments() (inputfile *string, concurrency *int, ccmax int, max_retry *int, dropdatabase *bool, db *string, u *string, pass string, debug *bool) {
+func readArguments() (inputfile *string, concurrency *int, ccmax int, maxRetry *int, dropdatabase *bool, db *string, u *string, pass string, debug *bool) {
 	inputfile = flag.String("i", "", "Input file with domains to analize")
 	concurrency = flag.Int("c", 50, "Concurrency: how many routines")
 	cmax := flag.Int("cmax", -1, "max Concurrency: how many routines")
-	max_retry = flag.Int("retry", 1, "retry:how many times")
+	maxRetry = flag.Int("retry", 1, "retry:how many times")
 	dropdatabase = flag.Bool("drop", false, "true if want to drop database")
 	p := flag.Bool("p", false, "Prompt for password?")
 	u = flag.String("u", "", "Database User")
@@ -275,17 +275,17 @@ func CreateTables(db *sql.DB) {
 		panic(err)
 	}
 }
-func SaveCDS(line string, field_1 int, field_2 int, field_3 int, field_4 string, field_5 string, run_id int, db *sql.DB) int {
-	var cds_id int
-	err := db.QueryRow("INSERT INTO cds(domain_name, field_1, field_2, field_3, field_4, field_5, run_id) VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING id", line, run_id).Scan(&cds_id)
+func SaveCDS(line string, field1 int, field2 int, field3 int, field4 string, field5 string, runId int, db *sql.DB) int {
+	var cdsId int
+	err := db.QueryRow("INSERT INTO cds(domain_name, field_1, field_2, field_3, field_4, field_5, run_id) VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING id", line, runId).Scan(&cdsId)
 	if err != nil {
 		fmt.Println("OpenConnections", db.Stats(), "domain name", line)
 		if strings.Contains(err.Error(), "too many open files") {
-			return SaveCDS(line, field_1, field_2, field_3, field_4, field_5, run_id, db)
+			return SaveCDS(line, field1, field2, field3, field4, field5, runId, db)
 		}
 		panic(err)
 	}
-	return cds_id
+	return cdsId
 }
 func DropTable(table string, db *sql.DB) {
 	if Drop {
@@ -297,18 +297,18 @@ func DropTable(table string, db *sql.DB) {
 	}
 }
 func NewRun(db *sql.DB) int {
-	var run_id int
-	err := db.QueryRow("INSERT INTO runs(tstmp) VALUES($1) RETURNING id", time.Now()).Scan(&run_id)
+	var runId int
+	err := db.QueryRow("INSERT INTO runs(tstmp) VALUES($1) RETURNING id", time.Now()).Scan(&runId)
 	if err != nil {
 		fmt.Println("OpenConnections", db.Stats())
 		panic(err)
 	}
-	return run_id
+	return runId
 }
-func SaveCorrectRun(run_id int, duration int, correct bool, db *sql.DB) {
-	_, err := db.Exec("UPDATE runs SET duration = $1, correct_run = $2 WHERE id = $3", int(duration/1000000000), correct, run_id)
+func SaveCorrectRun(runId int, duration int, correct bool, db *sql.DB) {
+	_, err := db.Exec("UPDATE runs SET duration = $1, correct_run = $2 WHERE id = $3", duration/1000000000, correct, runId)
 	if err != nil {
-		fmt.Println("OpenConnections", db.Stats(), " run_id", run_id)
+		fmt.Println("OpenConnections", db.Stats(), " run_id", runId)
 		panic(err)
 	}
 }

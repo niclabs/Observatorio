@@ -45,10 +45,10 @@ func manageError(err string, debug bool) {
 
 // Verifies if a SOA record exists for the given domain  name
 func CheckSOA(line string, servers []string, c *dns.Client) (*dns.Msg, error) {
-	var soa_records *dns.Msg
+	var soaRecords *dns.Msg
 	var err error
-	soa_records, _ /*rtt*/, err = GetRecordSet(line, dns.TypeSOA, servers, c)
-	return soa_records, err
+	soaRecords, _ /*rtt*/, err = GetRecordSet(line, dns.TypeSOA, servers, c)
+	return soaRecords, err
 }
 
 // Checks if a domain name has an A record
@@ -79,14 +79,14 @@ func FindKey(dnskeys *dns.Msg, rrsig *dns.RRSIG) *dns.DNSKEY {
 
 // Request for the AAAA records for the given domain
 func GetAAAARecords(line string, servers []string, c *dns.Client) ([]net.IP, error) {
-	var aaaa_records *dns.Msg
+	var aaaaRecords *dns.Msg
 	var err error
-	aaaa_records, _, err = GetRecordSet(line, dns.TypeAAAA, servers, c)
+	aaaaRecords, _, err = GetRecordSet(line, dns.TypeAAAA, servers, c)
 	if err != nil {
 		return nil, err
 	}
 	IPv6s := []net.IP{}
-	for _, a := range aaaa_records.Answer {
+	for _, a := range aaaaRecords.Answer {
 		if a1, err := a.(*dns.AAAA); err {
 			IPv6s = append(IPv6s, a1.AAAA)
 		}
@@ -96,14 +96,14 @@ func GetAAAARecords(line string, servers []string, c *dns.Client) ([]net.IP, err
 
 // Request for the A records for the given domain
 func GetARecords(line string, servers []string, c *dns.Client) ([]net.IP, error) {
-	var a_records *dns.Msg
+	var aRecords *dns.Msg
 	var err error
-	a_records, _, err = GetRecordSet(line, dns.TypeA, servers, c)
+	aRecords, _, err = GetRecordSet(line, dns.TypeA, servers, c)
 	if err != nil {
 		return nil, err
 	}
 	IPv4s := []net.IP{}
-	for _, a := range a_records.Answer {
+	for _, a := range aRecords.Answer {
 		if a1, ok := a.(*dns.A); ok {
 			IPv4s = append(IPv4s, a1.A)
 		}

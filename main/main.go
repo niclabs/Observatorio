@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"github.com/niclabs/Observatorio/dataCollector"
+	"github.com/niclabs/Observatorio/dataAnalyzer"
 	"github.com/niclabs/Observatorio/geoIPUtils"
 	"gopkg.in/yaml.v2"
 	"os"
@@ -10,63 +11,69 @@ import (
 
 type Config struct {
 	RunArguments struct {
-		Input_filepath     string   `yaml:"inputfilepath"`
-		Dontprobe_filepath string   `yaml:"dontprobefilepath"`
-		Concurrency        int      `yaml:"concurrency"`
-		Drop_database      bool     `yaml:"dropdatabase"`
-		Debug              bool     `yaml:"debug"`
-		Dns_servers        []string `yaml:"dnsservers"`
+		InputFilepath     string   `yaml:"inputfilepath"`
+		DontProbeFilepath string   `yaml:"dontprobefilepath"`
+		Concurrency       int      `yaml:"concurrency"`
+		DropDatabase      bool     `yaml:"dropdatabase"`
+		Debug             bool     `yaml:"debug"`
+		DnsServers        []string `yaml:"dnsservers"`
 	} `yaml:"runargs"`
 	Database struct {
-		Database_name string `yaml:"dbname"`
-		Username      string `yaml:"dbuser"`
-		Password      string `yaml:"dbpass"`
-		Host 		  string `yaml:"dbhost"`
-		Port          int `yaml:"dbport"`
+		DatabaseName string `yaml:"dbname"`
+		Username     string `yaml:"dbuser"`
+		Password     string `yaml:"dbpass"`
+		Host         string `yaml:"dbhost"`
+		Port         int    `yaml:"dbport"`
 	} `yaml:"database"`
 	Geoip struct {
-		Geoip_path             string `yaml:"geoippath"`
-		Geoip_asn_filename     string `yaml:"geoipasnfilename"`
-		Geoip_country_filename string `yaml:"geoipcountryfilename"`
-		Geoip_update_script    string `yaml:"geoipupdatescript"`
+		GeoipPath            string `yaml:"geoippath"`
+		GeoipAsnFilename     string `yaml:"geoipasnfilename"`
+		GeoipCountryFilename string `yaml:"geoipcountryfilename"`
+		GeoipUpdateScript    string `yaml:"geoipupdatescript"`
 	} `yaml:"geoip"`
 }
 
 var CONFIG_FILE string = "config.yml"
 var err error
 
+
 func main() {
 
 	//Read config file
 	f, err := os.Open(CONFIG_FILE)
 	if err != nil {
-		fmt.Printf(err.Error())
+		fmt.Printf("Can't open configuration file: " + err.Error())
+		return
 	}
 	defer f.Close()
 	var cfg Config
 	decoder := yaml.NewDecoder(f)
 	err = decoder.Decode(&cfg)
 	if err != nil {
-		fmt.Printf(err.Error())
+		fmt.Printf("Can't decode configuration: " + err.Error())
+		return
 	}
 
 	//Init geoip databases
-	var geoipDB *geoIPUtils.GeoipDB = geoIPUtils.InitGeoIP(cfg.Geoip.Geoip_path, cfg.Geoip.Geoip_country_filename, cfg.Geoip.Geoip_asn_filename, cfg.Geoip.Geoip_update_script)
+	var geoipDB *geoIPUtils.GeoipDB = geoIPUtils.InitGeoIP(cfg.Geoip.GeoipPath, cfg.Geoip.GeoipCountryFilename, cfg.Geoip.GeoipAsnFilename, cfg.Geoip.GeoipUpdateScript)
 
 	//Initialize collect
-	err = dataCollector.InitCollect(cfg.RunArguments.Dontprobe_filepath, cfg.RunArguments.Drop_database, cfg.Database.Username, cfg.Database.Password, cfg.Database.Host,cfg.Database.Port, cfg.Database.Database_name, geoipDB, cfg.RunArguments.Dns_servers)
+	err = dataCollector.InitCollect(cfg.RunArguments.DontProbeFilepath, cfg.RunArguments.DropDatabase, cfg.Database.Username, cfg.Database.Password, cfg.Database.Host,cfg.Database.Port, cfg.Database.DatabaseName, geoipDB, cfg.RunArguments.DnsServers)
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
 
 	//start collect
-	dataCollector.StartCollect(cfg.RunArguments.Input_filepath, cfg.RunArguments.Concurrency, cfg.Database.Database_name, cfg.Database.Username, cfg.Database.Password, cfg.Database.Host, cfg.Database.Port, cfg.RunArguments.Debug)
+	runId := dataCollector.StartCollect(cfg.RunArguments.InputFilepath, cfg.RunArguments.Concurrency, cfg.Database.DatabaseName, cfg.Database.Username, cfg.Database.Password, cfg.Database.Host, cfg.Database.Port, cfg.RunArguments.Debug)
 
-	dataCollector.EndCollect()
 
 	geoIPUtils.CloseGeoIP(geoipDB)
 	//analyze data
+
+
+	fmt.Printf("Analyzing Data...")
+	dataAnalyzer.AnalyzeData(runId, cfg.Database.DatabaseName, cfg.Database.Username, cfg.Database.Password, cfg.Database.Host, cfg.Database.Port)
 
 	//generate graphics
 
