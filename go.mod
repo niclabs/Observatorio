@@ -1,4 +1,4 @@
-module Observatorio
+module github.com/niclabs/Observatorio
 
 go 1.15
 

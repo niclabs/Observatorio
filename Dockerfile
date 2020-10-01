@@ -48,4 +48,5 @@ EXPOSE 5432
 
 # Command to run when starting the container
 ##CMD ["/dist/main"]
-CMD ["go", "run", "main/main.go"]
+CMD [ "go", "run", "main/main.go"]
+#"./wait_for_postgres.sh", "observatorio", "obslac",

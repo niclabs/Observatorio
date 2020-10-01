@@ -11,6 +11,8 @@ database:
     dbname: observatorio
     dbuser: obslac
     dbpass: password
+    dbhost: 172.21.128.1
+    dbport: 5432
 
 #runing arguments
 runargs:

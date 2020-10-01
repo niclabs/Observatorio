@@ -28,8 +28,10 @@ type Config struct {
 	} `yaml:"runargs"`
 	Database struct {
 		Database_name string `yaml:"dbname"`
-		Username      string `yaml:"user"`
-		Password      string `yaml:"pass"`
+		Username      string `yaml:"dbuser"`
+		Password      string `yaml:"dbpass"`
+		Host          string `yaml:"dbhost"`
+		Port          int `yaml:"dbport"`
 	} `yaml:"database"`
 }
 
@@ -77,14 +79,20 @@ func main() {
 		}
 	*/
 	fmt.Printf("Analyzing Data...")
-	AnalyzeData(34, cfg.Database.Database_name, cfg.Database.Username, cfg.Database.Password)
+	AnalyzeData(34, cfg.Database.Database_name, cfg.Database.Username, cfg.Database.Password, cfg.Database.Host, cfg.Database.Port)
 }
 
-func AnalyzeData(run_id int, dbname string, user string, password string) {
+func AnalyzeData(run_id int, dbname string, user string, password string, host string, port int) {
 	mutexTT = &sync.Mutex{}
 	t := time.Now()
 	c := 30
-	db, err := sql.Open("postgres", "user="+user+" password="+password+" dbname="+dbname+" sslmode=disable")
+	url := fmt.Sprintf("postgres://%v:%v@%v:%v/%v?sslmode=disable",
+		user,
+		password,
+		host,
+		port,
+		dbname)
+	db, err := sql.Open("postgres", url)
 	if err != nil {
 		fmt.Println(err)
 		return

@@ -21,6 +21,8 @@ type Config struct {
 		Database_name string `yaml:"dbname"`
 		Username      string `yaml:"dbuser"`
 		Password      string `yaml:"dbpass"`
+		Host 		  string `yaml:"dbhost"`
+		Port          int `yaml:"dbport"`
 	} `yaml:"database"`
 	Geoip struct {
 		Geoip_path             string `yaml:"geoippath"`
@@ -52,14 +54,14 @@ func main() {
 	var geoipDB *geoIPUtils.GeoipDB = geoIPUtils.InitGeoIP(cfg.Geoip.Geoip_path, cfg.Geoip.Geoip_country_filename, cfg.Geoip.Geoip_asn_filename, cfg.Geoip.Geoip_update_script)
 
 	//Initialize collect
-	err = dataCollector.InitCollect(cfg.RunArguments.Dontprobe_filepath, cfg.RunArguments.Drop_database, cfg.Database.Username, cfg.Database.Password, cfg.Database.Database_name, geoipDB, cfg.RunArguments.Dns_servers)
+	err = dataCollector.InitCollect(cfg.RunArguments.Dontprobe_filepath, cfg.RunArguments.Drop_database, cfg.Database.Username, cfg.Database.Password, cfg.Database.Host,cfg.Database.Port, cfg.Database.Database_name, geoipDB, cfg.RunArguments.Dns_servers)
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
 
 	//start collect
-	dataCollector.StartCollect(cfg.RunArguments.Input_filepath, cfg.RunArguments.Concurrency, cfg.Database.Database_name, cfg.Database.Username, cfg.Database.Password, cfg.RunArguments.Debug)
+	dataCollector.StartCollect(cfg.RunArguments.Input_filepath, cfg.RunArguments.Concurrency, cfg.Database.Database_name, cfg.Database.Username, cfg.Database.Password, cfg.Database.Host, cfg.Database.Port, cfg.RunArguments.Debug)
 
 	dataCollector.EndCollect()
 

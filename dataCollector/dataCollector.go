@@ -34,7 +34,7 @@ var weird_string_subdomain_name = "zskldhoisdh123dnakjdshaksdjasmdnaksjdh" //pot
 
 var dns_client *dns.Client
 
-func InitCollect(dont_probe_file_name string, drop bool, user string, password string, dbname string, geoipdb *geoIPUtils.GeoipDB, dnsServers []string) error {
+func InitCollect(dont_probe_file_name string, drop bool, user string, password string, host string, port int, dbname string, geoipdb *geoIPUtils.GeoipDB, dnsServers []string) error {
 	//check Dont probelist file
 	dontProbeList = InitializeDontProbeList(dont_probe_file_name)
 
@@ -42,8 +42,14 @@ func InitCollect(dont_probe_file_name string, drop bool, user string, password s
 	geoip_country_db = geoipdb.Country_db
 	geoip_asn_db = geoipdb.Asn_db
 
+	url := fmt.Sprintf("postgres://%v:%v@%v:%v/%v?sslmode=disable",
+		user,
+		password,
+		host,
+		port,
+		dbname)
 	//initialize database (create tables if not created already and drop database if indicated)
-	database, err := sql.Open("postgres", "user="+user+" password="+password+" dbname="+dbname+" sslmode=disable")
+	database, err := sql.Open("postgres", url)
 	if err != nil {
 		fmt.Println(err.Error())
 		return err
@@ -96,9 +102,14 @@ func InitializeDontProbeList(dpf string) (dontProbeList []*net.IPNet) {
 	return dontProbeList
 }
 
-func StartCollect(input string, c int, dbname string, user string, password string, debug_bool bool) {
-
-	database, err := sql.Open("postgres", "user="+user+" password="+password+" dbname="+dbname+" sslmode=disable")
+func StartCollect(input string, c int, dbname string, user string, password string, host string, port int, debug_bool bool) {
+	url := fmt.Sprintf("postgres://%v:%v@%v:%v/%v?sslmode=disable",
+		user,
+		password,
+		host,
+		port,
+		dbname)
+	database, err := sql.Open("postgres", url)
 	if err != nil {
 		fmt.Println(err)
 		return
