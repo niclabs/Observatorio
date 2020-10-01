@@ -1,5 +1,5 @@
 #!/bin/bash
-# Get License Key from config file (must get maxmind licensce key to use this software, and save it in 'license_key_geoip.txt' file)
+# Get License Key from config file (must get maxmind licence key to use this software, and save it in 'license_key_geoip.txt' file)
 
 geoip_found=false;
 while read line; do

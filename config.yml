@@ -5,6 +5,7 @@ geoip:
     geoipasnfilename: GeoLite2-ASN.mmdb
     geoipcountryfilename: GeoLite2-Country.mmdb
     geoipupdatescript: UpdateGeoliteDatabases.sh
+    geolitelicensekeypath: license_key_geoip
 
 # Database configurations
 database:

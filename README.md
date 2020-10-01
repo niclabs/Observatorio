@@ -1,132 +1,117 @@
 #Observatorio
-Software desarrollado con el fin de recolectar y analizar datos de un grupo de dominios.
+Software desarrollado con el fin de recolectar y analizar datos DNS de un conjunto de dominios.
 
+
+## Utilizando Docker:
+
+        docker cp Observatorio:Obs .
 
 ##Requisitos
-Correr en sistema Linux (probado en Ubuntu 19.10)
-Tener una instalación de Go (probado con version go1.12.10 linux/amd64)
+#### Geolite
+Para poder geolocalizar las direcciones IP es necesario obtener una llave para usar los servicios de geolite, Maxmind. puedes registrarte aquí: https://www.maxmind.com/en/geolite2/signup
+esta llave debe tener el nombre
+#### Go lang
+- Para descargar e instalar go lang siga las instrucciones en https://golang.org/doc/install.
+
+Asegúrese de agregar las variables de entorno $GOROOT y $GOPATH
+####Postgresql
+- Tener una base de datos potgreSQL
+(si se va a correr en docker, aseguarse de darle acceso al container, modificando el archivo "pg_hba.conf" de postgres según corresponda y reiniciando el servicio)
+- Configurar postgresql en Windows seguir las instrucciones en https://www.postgresql.org/download/windows/. Asegúrese de crear el usuario postgres con su contraseña. Para crear la base de datos a utilizar siga los siguentes pasos:
+    
+        $ psql -U postgres
+    
+        postgres=# CREATE ROLE su_usuario LOGIN password 'su_contraseña'; //crear un usuario
+    
+        postgres=# CREATE DATABASE su_base_de_datos OWNER su_usuario; //crear una base de datos y asignarla al usuario creado
+    
+        postgres=# \q
+    
+        $
+- Configurar postgresql en ubuntu
+
+        $ sudo apt-get install postgresql
+    
+        $ sudo -u postgres psql postgres
+            
+        postgres=# CREATE ROLE su_usuario LOGIN password 'su_contraseña'; //crear un usuario
+            
+        postgres=# CREATE DATABASE su_base_de_datos OWNER su_usuario; //crear una base de datos y asignarla al usuario creado
+            
+        postgres=# \q
+    
+        $
 
 ##Instalación
 
-- Clonar el repositorio
+- Clonar el repositorio u obtener librería usando:
+
+           $ go get github.com/niclabs/Observatorio
+
 - Setear GOPATH y GOROOT: seguir instrucciones de la documentación de go. Setear el gopath en la ruta donde está la carpeta Obstervatorio (la carpeta de este repositorio)
 
-- Instalar Librerías y dependencias
+#### Instalar Librerías y dependencias
 
 1. Librería DNS
 
->$ go get github.com/miekg/dns
+        $ go get github.com/miekg/dns
 
->$ go build github.com/miekg/dns
+        $ go build github.com/miekg/dns
 
 2. Librería geoip2
 
->$ sudo apt install libgeoip1 libgeoip-dev geoip-bin
+        $ sudo apt install libgeoip1 libgeoip-dev geoip-bin (en caso de usar ubuntu)
 
->$ go get github.com/oschwald/geoip2-golang
+        $ go get github.com/oschwald/geoip2-golang
 
 3. Librería postgresql
 
->$ go get github.com/lib/pq
+        $ go get github.com/lib/pq
 
 4. Librería para leer archivo de configuracion yml 
 
->$ go get gopkg.in/yaml.v2
+        $ go get gopkg.in/yaml.v2
 
 
 
-- Configurar postgresql
-
->$sudo apt-get install postgresql
-
->$sudo -u postgres psql postgres
-
->    postgres=# CREATE ROLE obslac LOGIN password 'password';
-
->    postgres=# CREATE DATABASE observatorio OWNER obslac;
-
->    postgres=# \q
-
->$
-
-- Obtener datos geográficos:
-
->$ wget -N -i ~/Observatorio/Utils/geoip_url_list.txt  #agregar ruta a Observatorio
->$ mkdir /usr/share/GeoIP
->$ gunzip GeoIP.dat.gz
->$ mv GeoIP.dat /usr/share/GeoIP/
->$ gunzip GeoIPv6.dat.gz
->$ mv GeoIPv6.dat /usr/share/GeoIP/
->$ gunzip GeoIPASNum.dat.gz
->$ mv GeoIPASNum.dat /usr/share/GeoIP/
->$ gunzip GeoIPASNumv6.dat.gz
->$ mv GeoIPASNumv6.dat /usr/share/GeoIP/
-https://download.maxmind.com/app/geoip_download?edition_id=GeoLite2-ASN&license_key=YOUR_LICENSE_KEY&suffix=tar.gz
 
 
 
 ##Modo de uso
 
-Para comenzar la recoleccion de datos ejecutar el siguiente comando:
-
->\$go run $GOPATH/src/github.com/maitegm/Observatorio/dataCollector/dataCollector.go
-
-> -i=inputfile -dp=dontprobefile -c=concurrency -pw=password -u=user -db=dbname
-
-
+- Llenar el archivo de configuración (config.yml) con los datos correspondientes
 con los siguientes argumentos:
 
- > -c int: Concurrency: how many routines (default 50)
-
- > -cmax int: max Concurrency: how many routines (default equal concurrency)
-
- > -db string: Database Name
-
- > -dp string:         Dont probe file with network to not ask
-
- > -drop:         true if want to drop database
-
- > -i string:         Input file with domains to analize
-
- > -p:         Prompt for password?
-
- > -pw string:         Database password
-
- > -retry int:         retry:how many times want to excecute (default 1)
-
- > -u string:         Database User
-
-Cuando la recolección termina indica el número de run_id ejecutado. También se puede consultar la tabla runs en la base de datos para ver todas las ejecuciones disponibles(las que no se hayan borrado de la base de datos con la opción -drop=true)
-
-
-Para comenzar a analizar los datos y generar los archivos ejecutar el siguiente comando
-
->\$go run \$GOPATH/src/github.com/maitegm/Observatorio/dataAnalyzer/dataAnalyzer.go -pw=dbpassword -u=dbuser -db=dbname -runid=runid
-
-ó
-
->\$go run \$GOPATH/src/github.com/maitegm/Observatorio/dataAnalyzer/dataAnalyzer.go -p=true -u=dbuser -db=dbname -runid=runid
-
-con los siguientes argumentos:
-
->-db string:         Database Name
-
->-p:         Prompt for password?
-
->-pw string:         Database Password
-
->-runid int:         Database run id (default 1)
-
->-u string:         Database User
+        #Geoip data
+        #Reminder: use spaces, yaml doesn't allow tabs
+        geoip:
+            geoippath: Geolite                              //folder where the geolite dabases are saved
+            geoipasnfilename: GeoLite2-ASN.mmdb             //name of the asn geolite database
+            geoipcountryfilename: GeoLite2-Country.mmdb     //name of the country geolite database
+            geoipupdatescript: UpdateGeoliteDatabases.sh    //name of the script used to update the geolite databases
+        # Database configurations
+        database:
+            dbname: observatorio        //name of the database you created
+            dbuser: obslac              //user you created
+            dbpass: password            //password for the user you created
+            dbhost: 172.21.128.1        //postgresql host
+            dbport: 5432                //postgresql port
+        #runing arguments
+        runargs:
+            inputfilepath: input-example.txt      //file with the list of domains you want to test
+            dontprobefilepath: dontprobefile.txt  //file with the list of IPs you dont want to query
+            concurrency: 100                      //desired concurrency
+            ccmax: 100                            //max concurrency
+            maxretry: 2                           //max attemps to retry a dns request
+            debug: false        
+            dnsservers: ["8.8.8.8", "1.1.1.1"]    //here put the dns servers you want to resolve the requests
+        #End of config data
 
 
+- Para comenzar la recoleccion de datos ejecutar el siguiente comando:
+
+        $go run $GOPATH/src/github.com/maitegm/Observatorio/main/main.go
+
+Esta operación puede tardar varias horas dependiendo del tamaño de la lista de dominios que se quieren analizar.
 
 
-
-
-
-go get github.com/miekg/dns
-go get github.com/lib/pq
-
-sudo apt-get install libgeoip-dev    # or 'brew install pkg-config'
-go get github.com/abh/geoip

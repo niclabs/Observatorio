@@ -53,6 +53,11 @@ func main() {
 		fmt.Printf("Can't decode configuration: " + err.Error())
 		return
 	}
+	//Check if a dns server is set in the config file
+	if (len(cfg.RunArguments.DnsServers)==0){
+		fmt.Printf("you must add at least one dns server in the config file.")
+		return
+	}
 
 	//Init geoip databases
 	var geoipDB *geoIPUtils.GeoipDB = geoIPUtils.InitGeoIP(cfg.Geoip.GeoipPath, cfg.Geoip.GeoipCountryFilename, cfg.Geoip.GeoipAsnFilename, cfg.Geoip.GeoipUpdateScript)
@@ -76,5 +81,6 @@ func main() {
 	dataAnalyzer.AnalyzeData(runId, cfg.Database.DatabaseName, cfg.Database.Username, cfg.Database.Password, cfg.Database.Host, cfg.Database.Port)
 
 	//generate graphics
+
 
 }
