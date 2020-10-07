@@ -9,7 +9,7 @@ Software desarrollado con el fin de recolectar y analizar datos DNS de un conjun
 ## Requisitos
 #### Geolite
 Para poder geolocalizar las direcciones IP es necesario obtener una llave para usar los servicios de geolite, Maxmind. puedes registrarte aquí: https://www.maxmind.com/en/geolite2/signup
-esta llave debe tener el nombre
+esta llave debe tener el nombre FIX THIS
 #### Go lang
 - Para descargar e instalar go lang siga las instrucciones en https://golang.org/doc/install.
 
@@ -110,8 +110,8 @@ con los siguientes argumentos:
 
 - Para comenzar la recoleccion de datos ejecutar el siguiente comando:
 
-        $go run $GOPATH/src/github.com/maitegm/Observatorio/main/main.go
+        $go run $GOPATH/src/github.com/niclabs/Observatorio/main/main.go
 
-Esta operación puede tardar varias horas dependiendo del tamaño de la lista de dominios que se quieren analizar.
+Esta operación puede tardar de algunos minutos a varias horas dependiendo del tamaño de la lista de dominios que se quieren analizar y de las capacidades de la máquina que se esté utilizando.
 
 
