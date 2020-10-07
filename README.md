@@ -1,4 +1,4 @@
-#Observatorio
+# Observatorio
 Software desarrollado con el fin de recolectar y analizar datos DNS de un conjunto de dominios.
 
 
@@ -6,7 +6,7 @@ Software desarrollado con el fin de recolectar y analizar datos DNS de un conjun
 
         docker cp Observatorio:Obs .
 
-##Requisitos
+## Requisitos
 #### Geolite
 Para poder geolocalizar las direcciones IP es necesario obtener una llave para usar los servicios de geolite, Maxmind. puedes registrarte aquí: https://www.maxmind.com/en/geolite2/signup
 esta llave debe tener el nombre
@@ -14,7 +14,7 @@ esta llave debe tener el nombre
 - Para descargar e instalar go lang siga las instrucciones en https://golang.org/doc/install.
 
 Asegúrese de agregar las variables de entorno $GOROOT y $GOPATH
-####Postgresql
+#### Postgresql
 - Tener una base de datos potgreSQL
 (si se va a correr en docker, aseguarse de darle acceso al container, modificando el archivo "pg_hba.conf" de postgres según corresponda y reiniciando el servicio)
 - Configurar postgresql en Windows seguir las instrucciones en https://www.postgresql.org/download/windows/. Asegúrese de crear el usuario postgres con su contraseña. Para crear la base de datos a utilizar siga los siguentes pasos:
@@ -77,7 +77,7 @@ Asegúrese de agregar las variables de entorno $GOROOT y $GOPATH
 
 
 
-##Modo de uso
+## Modo de uso
 
 - Llenar el archivo de configuración (config.yml) con los datos correspondientes
 con los siguientes argumentos:
