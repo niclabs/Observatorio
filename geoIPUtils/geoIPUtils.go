@@ -3,11 +3,17 @@ package geoIPUtils
 import (
 	"bytes"
 	"fmt"
+	"github.com/niclabs/Observatorio/utils"
 	"github.com/oschwald/geoip2-golang"
+	"io"
+	"log"
 	"net"
+	"net/http"
 	"os"
 	"os/exec"
 	"strconv"
+	"strings"
+	"sync"
 	"time"
 )
 
@@ -22,9 +28,9 @@ type GeoipDB struct {
 }
 
 // Initialize GEO IP databases
-func InitGeoIP(geoipPath string, geoipCountryDbName string, geoipAsnDbName string, geoipUpdateScript string) *GeoipDB {
+func InitGeoIP(geoipPath string, geoipCountryDbName string, geoipAsnDbName string, geoipLicenseKey string) *GeoipDB {
 	var err error
-	checkDatabases(geoipPath, geoipCountryDbName, geoipAsnDbName, geoipUpdateScript)
+	checkDatabases(geoipPath, geoipCountryDbName, geoipAsnDbName, geoipLicenseKey)
 	giCountryDb, err := getGeoIpCountryDB(geoipPath + "/" + geoipCountryDbName)
 	if err != nil {
 		fmt.Println(err.Error())
@@ -42,7 +48,71 @@ func CloseGeoIP(geoipDB *GeoipDB) {
 	geoipDB.AsnDb.Close()
 }
 
-func downloadGeoIp(geoipUpdateScript string) bool {
+func downloadGeoIp(licenseKey string, geoipPath string, geoipAsnFilename string, geoipCountryFilename string) bool {
+
+	//check if directory exists (create if not exists)
+	if _, err := os.Stat(geoipPath); os.IsNotExist(err) {
+		os.Mkdir(geoipPath,os.ModePerm)
+	}
+	urlAsn := "https://download.maxmind.com/app/geoip_download?edition_id=GeoLite2-ASN&license_key="+ licenseKey +"&suffix=tar.gz"
+	urlCountry := "https://download.maxmind.com/app/geoip_download?edition_id=GeoLite2-Country&license_key="+ licenseKey +"&suffix=tar.gz"
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	go downloadFile(urlAsn, geoipPath+"/"+geoipAsnFilename, &wg)
+
+	go downloadFile(urlCountry, geoipPath+"/"+geoipCountryFilename, &wg)
+	wg.Wait()
+
+	return true
+}
+func downloadFile(url string, filepath string,  wg *sync.WaitGroup )(err error) {
+	defer fmt.Println("download wgdone")
+	defer wg.Done()
+	fmt.Println(url)
+	// Get the data
+	resp, err := http.Get(url)
+	if err != nil {
+		fmt.Println(err)
+		return err
+	}
+	defer resp.Body.Close()
+	// Create the file
+	out, err := os.Create(filepath+".tar.gz")
+	if err != nil {
+		fmt.Println(err)
+		return err
+	}
+	defer os.Remove(filepath+".tar.gz")
+	defer out.Close()
+	// Write the body to file
+	_, err = io.Copy(out, resp.Body)
+	targz, _ := os.Open(filepath+".tar.gz")
+	defer targz.Close()
+	newFolderName := utils.ExtractTarGz(targz)
+	defer os.RemoveAll(newFolderName)
+	folderType :=""
+	if strings.Contains(newFolderName,"ASN"){
+		folderType = "ASN"
+	}else{
+		folderType = "Country"
+	}
+	newFilepath := newFolderName + "Geolite2-" + folderType + ".mmdb"
+	newLocation := "Geolite/Geolite2-" + folderType + ".mmdb"
+	err = os.Rename(newFilepath, newLocation)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+
+
+
+	return err
+}
+
+
+func downloadGeoIp2(geoipUpdateScript string) bool {
 
 	cmd := exec.Command("/bin/sh", geoipUpdateScript)
 	var out bytes.Buffer
@@ -59,30 +129,31 @@ func downloadGeoIp(geoipUpdateScript string) bool {
 }
 
 //Checks if databases exists, if exists, check if they are updated, return (bool)databases_found and (bool)databases_updated
-func checkDatabases(geoipPath string, geoipCountryDbName string, geoipAsnDbName string, geoipUpdateScript string) (bool, bool) {
+func checkDatabases(geoipPath string, geoipCountryDbName string, geoipAsnDbName string, geoipLicenseKey string) (bool, bool) {
 	goAgain := true
-	file := geoipPath + geoipCountryDbName
+	file := geoipPath +"/" +  geoipCountryDbName
 	databasesFound := false
 	databasesUpdated := false
-checkdb:
-	if fileInfo, err := os.Stat(file); err == nil {
-		databasesFound = true
-		if time.Now().After(fileInfo.ModTime().AddDate(0, 1, 0)) {
-			fmt.Println("not updated geoip databases")
-		} else {
-			fmt.Println("geoipDBs ok!!")
-			databasesUpdated = true
-			if goAgain {
-				goAgain = false
-				file = geoipPath + geoipAsnDbName
-				goto checkdb //now check asn db
+	if(false) {
+	checkdb:
+		if fileInfo, err := os.Stat(file); err == nil {
+			databasesFound = true
+			if time.Now().After(fileInfo.ModTime().AddDate(0, 1, 0)) {
+				fmt.Println("not updated geoip databases")
+			} else {
+				fmt.Println("geoipDBs ok!!")
+				databasesUpdated = true
+				if goAgain {
+					goAgain = false
+					file = geoipPath + "/" + geoipAsnDbName
+					goto checkdb //now check asn db
+				}
+				return databasesFound, databasesUpdated
 			}
-			return databasesFound, databasesUpdated
 		}
 	}
 	fmt.Println("Updating geoip databases")
-	got := downloadGeoIp(geoipUpdateScript)
-	fmt.Println("Attempting to Download databases")
+	got := downloadGeoIp(geoipLicenseKey,geoipPath, geoipAsnDbName, geoipCountryDbName)
 	if !got {
 		fmt.Println("Attempting to Download failed!! :( ")
 	} else {

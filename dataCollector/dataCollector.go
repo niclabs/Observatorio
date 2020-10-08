@@ -183,7 +183,7 @@ func getDomainsNameservers(domainName string) (nameservers []dns.RR) {
 	nss, _, err := dnsUtils.GetRecordSet(domainName, dns.TypeNS, configServers, dnsClient)
 	if err != nil {
 		manageError(strings.Join([]string{"get NS", domainName, err.Error()}, ""))
-		fmt.Println("Error asking for NS", domainName, err.Error())
+		//fmt.Println("Error asking for NS", domainName, err.Error())
 		return nil
 	} else {
 		if len(nss.Answer) == 0 || nss.Answer == nil {

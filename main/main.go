@@ -29,7 +29,7 @@ type Config struct {
 		GeoipPath            string `yaml:"geoippath"`
 		GeoipAsnFilename     string `yaml:"geoipasnfilename"`
 		GeoipCountryFilename string `yaml:"geoipcountryfilename"`
-		GeoipUpdateScript    string `yaml:"geoipupdatescript"`
+		GeoipLicenseKey    string `yaml:"geoiplicensekey"`
 	} `yaml:"geoip"`
 }
 
@@ -60,7 +60,7 @@ func main() {
 	}
 
 	//Init geoip databases
-	var geoipDB *geoIPUtils.GeoipDB = geoIPUtils.InitGeoIP(cfg.Geoip.GeoipPath, cfg.Geoip.GeoipCountryFilename, cfg.Geoip.GeoipAsnFilename, cfg.Geoip.GeoipUpdateScript)
+	var geoipDB *geoIPUtils.GeoipDB = geoIPUtils.InitGeoIP(cfg.Geoip.GeoipPath, cfg.Geoip.GeoipCountryFilename, cfg.Geoip.GeoipAsnFilename, cfg.Geoip.GeoipLicenseKey)
 
 	//Initialize collect
 	err = dataCollector.InitCollect(cfg.RunArguments.DontProbeFilepath, cfg.RunArguments.DropDatabase, cfg.Database.Username, cfg.Database.Password, cfg.Database.Host,cfg.Database.Port, cfg.Database.DatabaseName, geoipDB, cfg.RunArguments.DnsServers)
