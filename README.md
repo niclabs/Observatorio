@@ -2,22 +2,16 @@
 Software desarrollado con el fin de recolectar y analizar datos DNS de un conjunto de dominios.
 
 
-## Utilizando Docker:
 
-        docker cp Observatorio:Obs .
-
-## Requisitos
+## Requisitos Generales
 #### Geolite
-Para poder geolocalizar las direcciones IP es necesario obtener una llave para usar los servicios de geolite, Maxmind. puedes registrarte aquí: https://www.maxmind.com/en/geolite2/signup
-esta llave debe tener el nombre FIX THIS
-#### Go lang
-- Para descargar e instalar go lang siga las instrucciones en https://golang.org/doc/install.
+Para poder geolocalizar las direcciones IP es necesario obtener una llave para usar los servicios de geolite, Maxmind. puedes registrarte [aquí](https://www.maxmind.com/en/geolite2/signup).
+Esta llave debe ser guardada en el archivo de configuración config.yml con el nombre *geoiplicensekey*.
 
-Asegúrese de agregar las variables de entorno $GOROOT y $GOPATH
 #### Postgresql
-- Tener una base de datos potgreSQL
+- Para poder utilizas el Observatorio, es necesario tener una base de datos potgreSQL
 (si se va a correr en docker, aseguarse de darle acceso al container, modificando el archivo "pg_hba.conf" de postgres según corresponda y reiniciando el servicio)
-- Configurar postgresql en Windows seguir las instrucciones en https://www.postgresql.org/download/windows/. Asegúrese de crear el usuario postgres con su contraseña. Para crear la base de datos a utilizar siga los siguentes pasos:
+- Configurar postgresql en Windows seguir las instrucciones [acá](https://www.postgresql.org/download/windows/). Asegúrese de crear el usuario postgres con su contraseña. Para crear la base de datos a utilizar siga los siguentes pasos:
     
         $ psql -U postgres
     
@@ -42,13 +36,48 @@ Asegúrese de agregar las variables de entorno $GOROOT y $GOPATH
     
         $
 
+#Archivo de configuración
+ Independientemente de si usará Docker o no, es necesario llenar el archivo de configuración *config.yml* con los datos correspondientes
+como se muetsra a continuación:
+
+        #Reminder: use spaces, yaml doesn't allow tabs
+        #Geoip data
+        geoip:
+            geoippath: Geolite                              //folder where the geolite dabases are saved
+            geoipasnfilename: GeoLite2-ASN.mmdb             //name of the asn geolite database
+            geoipcountryfilename: GeoLite2-Country.mmdb     //name of the country geolite database
+            geoipupdatescript: UpdateGeoliteDatabases.sh    //name of the script used to update the geolite databases
+        # Database configurations
+        database:
+            dbname: observatorio                            //name of the database you created
+            dbuser: obslac                                  //user you created
+            dbpass: password                                //password for the user you created
+            dbhost: 172.21.128.1                            //postgresql host
+            dbport: 5432                                    //postgresql port
+        #runing arguments
+        runargs:
+            inputfilepath: input-example.txt                //file with the list of domains you want to test
+            dontprobefilepath: dontprobefile.txt            //file with the list of IPs you dont want to query
+            concurrency: 100                                //desired concurrency
+            ccmax: 100                                      //max concurrency
+            maxretry: 2                                     //max attemps to retry a dns request
+            debug: false        
+            dnsservers: ["8.8.8.8", "1.1.1.1"]              //here put the dns servers you want to resolve the requests
+        #End of config data
+
+Para poder ejecutar existen 2 opciones, ejecutarlo utilizando un contenedor Docker (lo que crea un ambiente aislado y evita instalar librerías adicionales), o ejecutarlo sin el contenedor, con la necesidad de inestalar todo manualmente.
+
+## Ejecución sin contenedor Docker
+
+#### Go lang
+- Para descargar e instalar go lang siga las instrucciones que se encuentran [aquí](https://golang.org/doc/install).
+Asegúrese de agregar las variables de entorno $GOROOT y $GOPATH
+
 ##Instalación
 
 - Clonar el repositorio u obtener librería usando:
 
            $ go get github.com/niclabs/Observatorio
-
-- Setear GOPATH y GOROOT: seguir instrucciones de la documentación de go. Setear el gopath en la ruta donde está la carpeta Obstervatorio (la carpeta de este repositorio)
 
 #### Instalar Librerías y dependencias
 
@@ -72,46 +101,35 @@ Asegúrese de agregar las variables de entorno $GOROOT y $GOPATH
 
         $ go get gopkg.in/yaml.v2
 
-
-
-
-
-
-## Modo de uso
-
-- Llenar el archivo de configuración (config.yml) con los datos correspondientes
-con los siguientes argumentos:
-
-        #Geoip data
-        #Reminder: use spaces, yaml doesn't allow tabs
-        geoip:
-            geoippath: Geolite                              //folder where the geolite dabases are saved
-            geoipasnfilename: GeoLite2-ASN.mmdb             //name of the asn geolite database
-            geoipcountryfilename: GeoLite2-Country.mmdb     //name of the country geolite database
-            geoipupdatescript: UpdateGeoliteDatabases.sh    //name of the script used to update the geolite databases
-        # Database configurations
-        database:
-            dbname: observatorio        //name of the database you created
-            dbuser: obslac              //user you created
-            dbpass: password            //password for the user you created
-            dbhost: 172.21.128.1        //postgresql host
-            dbport: 5432                //postgresql port
-        #runing arguments
-        runargs:
-            inputfilepath: input-example.txt      //file with the list of domains you want to test
-            dontprobefilepath: dontprobefile.txt  //file with the list of IPs you dont want to query
-            concurrency: 100                      //desired concurrency
-            ccmax: 100                            //max concurrency
-            maxretry: 2                           //max attemps to retry a dns request
-            debug: false        
-            dnsservers: ["8.8.8.8", "1.1.1.1"]    //here put the dns servers you want to resolve the requests
-        #End of config data
-
-
 - Para comenzar la recoleccion de datos ejecutar el siguiente comando:
 
         $go run $GOPATH/src/github.com/niclabs/Observatorio/main/main.go
 
 Esta operación puede tardar de algunos minutos a varias horas dependiendo del tamaño de la lista de dominios que se quieren analizar y de las capacidades de la máquina que se esté utilizando.
+
+
+
+
+## Utilizando Docker:
+
+        
+ - Clonar el repositorio desde github:
+ 
+        git clone github.com/niclabs/Observatorio
+        
+ - Construir el contenedor:
+ 
+        docker build -t observatorio .  
+        
+ - Finalmente, para ejecutar el programa, debe correr el contendor con el siguiente comando:
+      
+        docker run observatorio
+        
+ Esta operación puede tardar de algunos minutos a varias horas dependiendo del tamaño de la lista de dominios que se quieren analizar y de las capacidades de la máquina que se esté utilizando.
+        
+
+Una vez la ejecución haya terminado, se generarán una serie de archivos en formato *csv* y *json*, en la carpeta *csvs*, los cuales puede ver en una página web utilizando el código que se encuentra en https://github.com/niclabs/ObservatorioLAC-Graficos.git, o puede generar su propio set de datos desde la base de datos (un diagrama de la base de datos se puede ver [aquí](database)). 
+
+
 
 
