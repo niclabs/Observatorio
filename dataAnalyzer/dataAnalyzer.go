@@ -18,7 +18,7 @@ var mutexTT *sync.Mutex
 var csvsFolder string = "csvs"
 
 
-func AnalyzeData(runId int, dbname string, user string, password string, host string, port int) {
+func AnalyzeData(runId int, dbname string, user string, password string, host string, port int) (ts string){
 	mutexTT = &sync.Mutex{}
 	t := time.Now()
 	c := 30
@@ -33,7 +33,7 @@ func AnalyzeData(runId int, dbname string, user string, password string, host st
 		fmt.Println(err)
 		return
 	}
-	ts := dbController.GetRunTimestamp(runId, db)
+	ts = dbController.GetRunTimestamp(runId, db)
 	fmt.Println(ts)
 	//TODO fix ts format-> ":" not accepted in windows
 	ts=strings.ReplaceAll(ts,":","-")
@@ -83,6 +83,7 @@ func AnalyzeData(runId int, dbname string, user string, password string, host st
 	fmt.Println("Total Time (min:sec):", TotalTime/60000000000, ":", TotalTime%60000000000/1000000000)
 
 	fmt.Println("openconnections", db.Stats())
+	return ts
 }
 func verifyDNSSEC(domainId int, db *sql.DB){
 	//check if dnskey is found
