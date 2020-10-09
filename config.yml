@@ -1,10 +1,9 @@
 #Geoip data
 #Reminder: use spaces, yaml doesn't allow tabs
 geoip:
-    geoippath: Geolite
-    geoipasnfilename: Geolite2-ASN.mmdb
-    geoipcountryfilename: Geolite2-Country.mmdb
-    geoipupdatescript: UpdateGeoliteDatabases.sh
+    geoippath: GeoLite
+    geoipasnfilename: GeoLite2-ASN.mmdb
+    geoipcountryfilename: GeoLite2-Country.mmdb
     geoiplicensekey: TpCPFWiVfktxfdEp
 
 # Database configurations

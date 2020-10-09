@@ -198,7 +198,7 @@ func obtainNsIpv4Info(ip net.IP, domainName string, nameserverId int, runId int,
 	asn := geoIPUtils.GetIPASN(nameserverIpString, geoipAsnDb)
 	country := geoIPUtils.GetIPCountry(nameserverIpString, geoipCountryDb)
 	if isIPInDontProbeList(ip) {
-		fmt.Println("domain ", domainName, "in DontProbeList", ip)
+		//fmt.Println("domain ", domainName, "in DontProbeList", ip)
 		//TODO Future: save DONTPROBELIST in nameserver? and Domain?
 		dbController.SaveNSIP(nameserverId, nameserverIpString, country, asn, dontProbe, runId, db)
 		return ""
@@ -257,7 +257,7 @@ func checkZoneTransfer(domainName string, ns string) (zoneTransfer bool) {
 		if val != nil {
 			if val.Error != nil {
 			} else {
-				fmt.Printf("zone_transfer succeded oh oh!!")
+				//fmt.Printf("zone_transfer succeded oh oh!!")
 				zoneTransfer = true
 			}
 		}
@@ -399,14 +399,14 @@ func getAndSaveDNSSECinfo(domainName string, domainNameServers []string, domainI
 							if key != nil {
 								keyFound = true
 								if err := rrsig.Verify(key, dsRrset); err != nil {
-									fmt.Printf(";- Bogus signature, %s does not validate (DNSKEY %s/%d/%s) [%s] %s\n", rrsig.Hdr.Name, key.Header().Name, key.KeyTag(), "net", err, expired)
+									//fmt.Printf(";- Bogus signature, %s does not validate (DNSKEY %s/%d/%s) [%s] %s\n", rrsig.Hdr.Name, key.Header().Name, key.KeyTag(), "net", err, expired)
 									verified = false
 								} else {
 									verified = true
 								}
 							}
 						} else {
-							fmt.Println("DS error no key found")
+							//fmt.Println("DS error no key found")
 						}
 						if keyFound && verified && !expired {
 							dsOk = true
@@ -498,7 +498,7 @@ func getAndSaveDNSSECinfo(domainName string, domainNameServers []string, domainI
 				t := dns.TypeA
 				in, _, err := dnsUtils.GetRecordSetWithDNSSEC(line, t, domainNameServers, dnsClient)
 				if err != nil {
-					fmt.Println(err.Error())
+					//fmt.Println(err.Error())
 					manageError(strings.Join([]string{"nsec/3", line, err.Error()}, ""))
 				} else {
 					nonExistenceStatus := in.Rcode
@@ -569,7 +569,7 @@ func getAndSaveDNSSECinfo(domainName string, domainNameServers []string, domainI
 									}
 								}
 							}
-							fmt.Println(domainName, ncover, ncoverwc, niswc, nsecId)
+
 							dbController.UpdateNSEC(keyFound && verified && !expired, ncover, ncoverwc, niswc, nsecId, db)
 
 						} else
@@ -605,7 +605,7 @@ func getAndSaveDNSSECinfo(domainName string, domainNameServers []string, domainI
 									if !rrsig.ValidityPeriod(time.Now().UTC()) {
 										expired = true
 									}
-									fmt.Println(domainName,"expired:", expired)
+
 									//---------------DNSKEY----------------------------
 									if rrsig.SignerName != line {
 										dnskeys, _, _ = dnsUtils.GetRecordSetWithDNSSEC(rrsig.SignerName, dns.TypeDNSKEY, configServers, dnsClient)
@@ -616,7 +616,7 @@ func getAndSaveDNSSECinfo(domainName string, domainNameServers []string, domainI
 										key := dnsUtils.FindKey(dnskeys, rrsig)
 										if key != nil {
 											keyFound = true
-											fmt.Println(domainName,"keyFound", keyFound)
+
 											var rrset []dns.RR
 											rrset = []dns.RR{nsec3}
 											if err := rrsig.Verify(key, rrset); err != nil {
@@ -626,7 +626,7 @@ func getAndSaveDNSSECinfo(domainName string, domainNameServers []string, domainI
 												verified = true
 
 											}
-											fmt.Println(domainName,"verified:", verified)
+
 										}
 									}
 									if keyFound && verified && !expired {
@@ -635,7 +635,7 @@ func getAndSaveDNSSECinfo(domainName string, domainNameServers []string, domainI
 								}
 							}
 
-							fmt.Println(domainName,n3match, n3cover, n3coverwc, n3wc, nsec3Id)
+
 							dbController.UpdateNSEC3(keyFound && verified && !expired, keyFound, verified, expired, n3match, n3cover, n3coverwc, n3wc, nsec3Id, db)
 						}
 					}
@@ -643,23 +643,6 @@ func getAndSaveDNSSECinfo(domainName string, domainNameServers []string, domainI
 			}
 		}
 	}
-
-
-	//dnskeyFound,  err := getAndSaveDNSKEYs( domainName, domainNameServers, domainId, runId, db)
-	//if err != nil {
-	//	manageError(strings.Join([]string{"dnskey", domainName, err.Error()}, ""))
-	//	return dnskeyFound
-	//}
-	//if !dnskeyFound {
-	//	return dnskeyFound
-	//}
-	//getAndSaveDS(domainName, configServers, domainId, runId, db)
-	//dbController.UpdateDomainDNSKEYInfo(domainId, dnskeyFound, false, db) //TODO update this, second argument always false
-	//if(dnskeyFound) {
-		//get and save nsec/3 info
-	//	getAndSaveNSECinfo(domainName, configServers, domainId, runId, db)
-	//}
-	//return dnskeyFound
 }
 
 // Collects info from a single domain (ran by a routine) and save it to the databses.
@@ -693,7 +676,7 @@ func collectSingleDomainInfo(domainName string, runId int, db *sql.DB) {
 					} else {
 						for _, ip := range ipv4 {
 							nameserverIpString := obtainNsIpv4Info(ip, domainName, nameserverId, runId, db)
-							fmt.Println(domainName, "nameserverIpString", nameserverIpString)
+
 							if nameserverIpString != "" {
 								domainNameServers = append(domainNameServers, nameserverIpString)
 								domainNameServers4 = append(domainNameServers4, nameserverIpString)
@@ -707,7 +690,7 @@ func collectSingleDomainInfo(domainName string, runId int, db *sql.DB) {
 					} else {
 						for _, ip := range ipv6 {
 							nameserverIpString := obtainNsIpv6Info(ip, nameserverId, runId, db)
-							fmt.Println(domainName, "nameserverIpString", nameserverIpString)
+
 							if nameserverIpString != "" {
 								domainNameServers = append(domainNameServers, nameserverIpString)
 							}
@@ -757,7 +740,7 @@ func isIPInDontProbeList(ip net.IP) bool {
 	var ipnet *net.IPNet
 	for _, ipnet = range dontProbeList {
 		if ipnet.Contains(ip) {
-			fmt.Println("DONT PROBE LIST ip: ", ip, " found in: ", ipnet)
+			//fmt.Println("DONT PROBE LIST ip: ", ip, " found in: ", ipnet)
 			return true
 		}
 	}

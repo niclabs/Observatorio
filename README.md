@@ -130,6 +130,11 @@ Esta operación puede tardar de algunos minutos a varias horas dependiendo del t
 
 Una vez la ejecución haya terminado, se generarán una serie de archivos en formato *csv* y *json*, en la carpeta *csvs*, los cuales puede ver en una página web utilizando el código que se encuentra en https://github.com/niclabs/ObservatorioLAC-Graficos.git, o puede generar su propio set de datos desde la base de datos (un diagrama de la base de datos se puede ver [aquí](database)). 
 
+para obtener los archivos de la carpeta csvs ejecutar el siguiente comando:
+
+        docker cp <containerID>:/Observatorio/csvs/ </local/dest/folder>
+
+reemplazando el id del container y la carpeta de destino que desea utilizar
 
 
 

@@ -78,7 +78,6 @@ func downloadGeoIp(licenseKey string, geoipPath string, geoipAsnFilename string,
 	return true
 }
 func downloadFile(url string, filepath string,  wg *sync.WaitGroup ) {
-	defer fmt.Println("download wgdone")
 	defer wg.Done()
 	// Get the data
 	resp, err := http.Get(url)
@@ -86,7 +85,7 @@ func downloadFile(url string, filepath string,  wg *sync.WaitGroup ) {
 		log.Fatal(err)
 		return
 	}
-	fmt.Println(resp.Status)
+
 	defer resp.Body.Close()
 	// Create the file
 	out, err := os.Create(filepath+".tar.gz")
@@ -186,7 +185,7 @@ func checkDatabases(geoipPath string, geoipCountryDbName string, geoipAsnDbName 
 func getGeoIpCountryDB(file string) (*geoip2.Reader, error) {
 	gi, err := geoip2.Open(file)
 	if err != nil {
-		fmt.Printf("Could not open Geolite2-Country database: %s\n", err)
+		fmt.Printf("Could not open GeoLite2-Country database: %s\n", err)
 		return nil, err
 	}
 	fmt.Printf("GEOLITE2 country db opened\n")
