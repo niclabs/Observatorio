@@ -4,7 +4,7 @@ geoip:
     geoippath: GeoLite
     geoipasnfilename: GeoLite2-ASN.mmdb
     geoipcountryfilename: GeoLite2-Country.mmdb
-    geoiplicensekey: TpCPFWiVfktxfdEp
+    geoiplicensekey: yourLicenseKey
 
 # Database configurations
 database:
