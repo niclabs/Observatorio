@@ -1,7 +1,6 @@
 package geoIPUtils
 
 import (
-	"bytes"
 	"fmt"
 	"github.com/niclabs/Observatorio/utils"
 	"github.com/oschwald/geoip2-golang"
@@ -10,17 +9,11 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"os/exec"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 )
-
-//var GEOIP_path string = "Geolite/" // "/usr/share/GeoIP"
-//var GEOIP_country_name string = "GeoLite2-Country.mmdb"
-//var GEOIP_ASN_name string = "GeoLite2-ASN.mmdb"
-//var Get_GeoIP_script_path string = "UpdateGeoliteDatabases.sh"
 
 type GeoipDB struct {
 	CountryDb *geoip2.Reader
@@ -115,9 +108,8 @@ func downloadFile(url string, filepath string,  wg *sync.WaitGroup ) {
 		folderType = "Country"
 	}
 	newFilepath := newFolderName + "GeoLite2-" + folderType + ".mmdb"
-	newLocation := "GeoLite/GeoLite2-" + folderType + ".mmdb"
 
-	err = utils.MoveFile(newFilepath, newLocation)
+	err = utils.MoveFile(newFilepath, filepath)
 
 	//err = os.Rename(newFilepath, newLocation)
 	if err != nil {
@@ -129,21 +121,6 @@ func downloadFile(url string, filepath string,  wg *sync.WaitGroup ) {
 }
 
 
-func downloadGeoIp2(geoipUpdateScript string) bool {
-
-	cmd := exec.Command("/bin/sh", geoipUpdateScript)
-	var out bytes.Buffer
-	cmd.Stdout = &out
-	err := cmd.Stderr
-
-	if err != nil {
-		fmt.Println(err)
-		return false
-	}
-	fmt.Println("Get GeoIP databases:", out.String())
-
-	return true
-}
 
 //Checks if databases exists, if exists, check if they are updated, return (bool)databases_found and (bool)databases_updated
 func checkDatabases(geoipPath string, geoipCountryDbName string, geoipAsnDbName string, geoipLicenseKey string) (bool, bool) {
@@ -185,7 +162,7 @@ func checkDatabases(geoipPath string, geoipCountryDbName string, geoipAsnDbName 
 func getGeoIpCountryDB(file string) (*geoip2.Reader, error) {
 	gi, err := geoip2.Open(file)
 	if err != nil {
-		fmt.Printf("Could not open GeoLite2-Country database: %s\n", err)
+		fmt.Printf("Could not open GeoLite2 Country database: %s\n", err)
 		return nil, err
 	}
 	fmt.Printf("GEOLITE2 country db opened\n")
@@ -196,7 +173,7 @@ func getGeoIpCountryDB(file string) (*geoip2.Reader, error) {
 func getGeoIpAsnDB(file string) (*geoip2.Reader, error) {
 	gi, err := geoip2.Open(file)
 	if err != nil {
-		fmt.Printf("Could not open GeoLite2-ASN database: %s\n", err)
+		fmt.Printf("Could not open GeoLite2 ASN database: %s\n", err)
 		return nil, err
 	}
 	fmt.Printf("GEOLITE2 asn db opened\n")
