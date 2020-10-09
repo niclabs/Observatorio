@@ -128,7 +128,7 @@ Esta operación puede tardar de algunos minutos a varias horas dependiendo del t
  Esta operación puede tardar de algunos minutos a varias horas dependiendo del tamaño de la lista de dominios que se quieren analizar y de las capacidades de la máquina que se esté utilizando.
         
 
-Una vez la ejecución haya terminado, se generarán una serie de archivos en formato *csv* y *json*, en la carpeta *csvs*, los cuales puede ver en una página web utilizando el código que se encuentra en https://github.com/niclabs/ObservatorioLAC-Graficos.git, o puede generar su propio set de datos desde la base de datos (un diagrama de la base de datos se puede ver [aquí](database)). 
+Una vez la ejecución haya terminado, se generarán una serie de archivos en formato *csv* y *json*, en la carpeta *csvs*, los cuales puede ver en una página web utilizando el código que se encuentra en https://github.com/niclabs/ObservatorioLAC-Graficos.git, o puede generar su propio set de datos desde la base de datos (un diagrama de la base de datos se puede ver [aquí](https://github.com/niclabs/Observatorio/wiki/database)). 
 
 para obtener los archivos de la carpeta csvs ejecutar el siguiente comando:
 
