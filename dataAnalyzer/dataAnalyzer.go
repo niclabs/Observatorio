@@ -84,7 +84,29 @@ func AnalyzeData(runId int, dbname string, user string, password string, host st
 
 	fmt.Println("openconnections", db.Stats())
 }
+func verifyDNSSEC(domainId int, db *sql.DB){
+	//check if dnskey is found
+	dnskeyFound, _ := dbController.GetDNSKEYInfo(domainId, db)
+	if(!dnskeyFound){
+		return
+	}
+	//verify DS against dnskey SEP
+	//verify DNSKey 256 zsk against 257 ksk
+	//verify nonexistence
+	//if not wildcard:
+	//if nsec
+	//check wildcard
+	//check cover doman
+	//if nsec3
+	//check next closer
+	//check closest encloser
+	//check wildcard
+	//if wildcard check rrsig ok
+}
+
 func CheckDomainInfo(domainId int, db *sql.DB) {
+	//verify DNSSEC
+	verifyDNSSEC(domainId, db)
 	//CheckDispersion(domain_id,db)
 	dnssecOk := false
 	dsFound, dsOk, dnskeyFound, dnskeyOk, nsecFound, nsecOk, nsec3Found, nsec3Ok, _ := CheckDNSSEC(domainId, db)

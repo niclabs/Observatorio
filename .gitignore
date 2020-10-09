@@ -1,6 +1,5 @@
 dontprobe_list.txt
 config.yml
-license_key_geoip.txt
 
 /Geolite/Geolite2-Country.mmdb
 /Geolite/Geolite2-ASN.mmdb

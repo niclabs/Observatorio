@@ -4,8 +4,10 @@ import (
 	"database/sql"
 	"fmt"
 	"github.com/miekg/dns"
+	"log"
 	"strings"
 	"time"
+
 )
 
 func CreateTables(db *sql.DB, drop bool) {
@@ -125,12 +127,53 @@ func SaveSoa(soa bool, domainid int, db *sql.DB) {
 		panic(err)
 	}
 }
-func SaveDNSKEY(dnskey *dns.DNSKEY, domainId int, runId int, db *sql.DB) {
-	_, err := db.Exec("INSERT INTO dnskey(domain_id, public_key, owner, ttl, type, protocol, algorithm, keytag, run_id)VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9)", domainId, dnskey.PublicKey, dnskey.Hdr.Name, dnskey.Hdr.Ttl, dnskey.Hdr.Rrtype, dnskey.Protocol, dnskey.Algorithm, dnskey.KeyTag(), runId)
+func SaveDNSKEY(dnskey *dns.DNSKEY, dsok bool, domainId int, runId int, db *sql.DB) {
+	_, err := db.Exec("INSERT INTO dnskey(domain_id, public_key, owner, ttl, type, protocol, algorithm, keytag, DSok, run_id)VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)", domainId, dnskey.PublicKey, dnskey.Hdr.Name, dnskey.Hdr.Ttl, dnskey.Hdr.Rrtype, dnskey.Protocol, dnskey.Algorithm, dnskey.KeyTag(), dsok, runId)
 	if err != nil {
 		fmt.Println("OpenConnections", db.Stats(), " DomainId: ", domainId)
 		panic(err)
 	}
+}
+
+
+type DNSKEY struct {
+	PublicKey string
+	Owner string
+	Ttl int
+	KeyType int
+	Protocol int
+	Algorithm int
+	KeyTag int
+}
+
+func getDNSKEYs(domainId int, runId int, db *sql.DB, dnskeys []DNSKEY)(size int){
+	query := `SELECT public_key, owner, ttl, type, protocol, algorithm, keytag 
+				from dnskey where run_id=$1 and domain_id=$2;`
+
+	rows, err:= db.Query(query, runId, domainId)
+
+	if err != nil {
+		panic(err)
+	}
+	defer rows.Close()
+	i:=0
+	publicKey:=""
+	owner:=""
+	ttl:=-1
+	keyType:=-1
+	protocol:=-1
+	algorithm :=-1
+	keyTag:=-1
+
+	for rows.Next() {
+		if err := rows.Scan(&publicKey, &owner, &ttl, &keyType, &protocol, &algorithm, &keyTag); err != nil {
+			log.Fatal(err)
+		}
+		dnskeys[i]=DNSKEY{PublicKey: publicKey, Owner: owner, Ttl: ttl, KeyType:keyType, Protocol: protocol, Algorithm: algorithm, KeyTag:keyTag}
+		i++
+	}
+	return i
+
 }
 func SaveRRSIG(rrsig *dns.RRSIG, domainId int, runId int, db *sql.DB) {
 

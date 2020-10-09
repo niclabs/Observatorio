@@ -17,20 +17,20 @@ import (
 	"time"
 )
 
-var concurrency int = 100
-var dontProbeListFile string
+var concurrency = 100
+
 var dontProbeList []*net.IPNet
 
-var totalTime int = 0
+var totalTime = 0
 
 var debug = false
-var err error
+
 var geoipCountryDb *geoip2.Reader
 var geoipAsnDb *geoip2.Reader
 
 var configServers []string
 
-var weirdStringSubdomainName = "zskldhoisdh123dnakjdshaksdjasmdnaksjdh" //potentially unexistent subdomain To use with NSEC
+var weirdStringSubdomainName = "zskldhoisdh123dnakjdshaksdjasmdnaksjdh" //potentially nonexistent subdomain To use with NSEC
 
 var dnsClient *dns.Client
 
@@ -71,7 +71,6 @@ func InitCollect(dontProbeFileName string, drop bool, user string, password stri
 	return nil //no error.
 
 }
-
 
 func InitializeDontProbeList(dpf string) (dontProbeList []*net.IPNet) {
 	dontProbeListFile := dpf
@@ -193,7 +192,7 @@ func getDomainsNameservers(domainName string) (nameservers []dns.RR) {
 	}
 }
 
-func obtain_NS_IPv4_info(ip net.IP, domain_id int, domainName string, nameserverId int, runId int, db *sql.DB) (nameserverIpString string) {
+func obtainNsIpv4Info(ip net.IP, domainName string, nameserverId int, runId int, db *sql.DB) (nameserverIpString string) {
 	nameserverIpString = net.IP.String(ip)
 	dontProbe := true
 	asn := geoIPUtils.GetIPASN(nameserverIpString, geoipAsnDb)
@@ -208,7 +207,7 @@ func obtain_NS_IPv4_info(ip net.IP, domain_id int, domainName string, nameserver
 	dbController.SaveNSIP(nameserverId, nameserverIpString, country, asn, dontProbe, runId, db)
 	return nameserverIpString
 }
-func obtain_NS_IPv6_info(ip net.IP, domain_id int, domain_name string, nameserverId int, runId int, db *sql.DB) (nameserverIpString string) {
+func obtainNsIpv6Info(ip net.IP,  nameserverId int, runId int, db *sql.DB) (nameserverIpString string) {
 	nameserverIpString = net.IP.String(ip)
 	country := geoIPUtils.GetIPCountry(nameserverIpString, geoipCountryDb)
 	asn := geoIPUtils.GetIPASN(nameserverIpString, geoipAsnDb)
@@ -281,13 +280,14 @@ func checkLOCQuery(domainName string, ns string) (locQuery bool) {
 	return locQuery
 }
 
-func getAndSaveDomainIPv4(domainName string, domainNameServers []string, domainId int, runId int, db *sql.DB) {
+func getAndSaveDomainIPv4(domainName string, domainNameServers []string, domainId int, runId int, db *sql.DB) (server string){
 	ipv4, err := dnsUtils.GetARecords(domainName, domainNameServers, dnsClient)
 	if err != nil {
 		manageError(strings.Join([]string{"get a record", domainName, err.Error()}, ""))
 	} else {
 		for _, ip := range ipv4 {
 			ips := net.IP.String(ip)
+			server = ips
 			dbController.SaveDomainIp(ips, domainId, runId, db)
 		}
 	}
@@ -308,7 +308,7 @@ func getAndSaveDomainIPv6(domainName string, domainNameServers []string, domainI
 	}
 }
 
-func getAndSaveDomainSOA(domainName string, domainNameServers []string, domainId int, run_id int, db *sql.DB) {
+func getAndSaveDomainSOA(domainName string, domainNameServers []string, domainId int,  db *sql.DB) {
 	/*check soa*/
 	SOA := false
 	soa, err := dnsUtils.CheckSOA(domainName, domainNameServers, dnsClient)
@@ -348,272 +348,333 @@ func checkAndSaveDSs(domain_name string, servers []string, domain_id int, run_id
 
 }*/
 
-func getAndSaveDS(domainName string, servers []string, domainId int, runId int, db *sql.DB) { //Find DS in superior level
-	superiorDomain := strings.SplitN(domainName, ".", 2)[1] //removes first section in domain_name "a.b.c" -> ["a", "b.c"] //TODO check value.. .cl. wont work
-	//if(superior_domain == ""){ not sure if necessary
-	//	superior_domain = "."
-	//}
-	//find NS of superior domain
-	var superiorNameservers []string
-	superiorNss, _, err := dnsUtils.GetRecordSetWithDNSSEC(superiorDomain, dns.TypeNS, servers, dnsClient)
-	if err != nil {
-		manageError(err.Error())
-		return
-	}
+func getAndSaveDNSSECinfo(domainName string, domainNameServers []string, domainId int, runId int, db *sql.DB)  {
 
-	for _, superiorNs := range superiorNss.Answer {
-		if currentSuperiorNs, ok := superiorNs.(*dns.NS); ok {
-			superiorNameservers = append(superiorNameservers, currentSuperiorNs.Ns)
-		}
-	}
-	//ask for DS to superior NSs
-	dsRrset, _, err := dnsUtils.GetRecordSetWithDNSSEC(domainName, dns.TypeDS, superiorNameservers, dnsClient)
-	if err != nil {
-		manageError(err.Error())
-		return
-	}
-	for _, ds := range dsRrset.Answer {
-		if currentDs, ok := ds.(*dns.DS); ok {
-			var algorithm = int(currentDs.Algorithm)
-			var keyTag int = int(currentDs.KeyTag)
-			var digestType int = int(currentDs.DigestType)
-			digest := currentDs.Digest
-			dbController.SaveDS(domainId, algorithm, keyTag, digestType, digest, runId, db)
-		}
-	}
-}
 
-func getAndSaveDNSKEYs(dnskeyRrs *dns.Msg, domain_name string, servers []string, domainId int, runId int, db *sql.DB) (dnskeyFound bool) {
-	fmt.Println("getAndSaveDNSKEYs")
-	dnskeyFound = true
-	for _, dnskey := range dnskeyRrs.Answer {
-		if dnskey1, ok := dnskey.(*dns.DNSKEY); ok {
-			dnskeyFound = true
-			//dnskey_rrset = append(dnskey_rrset,dnskey1)
-			dbController.SaveDNSKEY(dnskey1, domainId, runId, db)
-			/* do this in analysis
-			dnskey_ds_ok = false;
-			if(dnskey1.Flags&1 == 1){ //SEP (Secure Entry Point)
-				//check DS agains dnskey
-				ds1 := dnskey1.ToDS(dnskey1.Algorithm)
-				for _, ds := range ds_rrset.Answer {
-					if ds2,ok:=ds.(*dns.DS);ok{
-						if(ds2.Digest==ds1.Digest) {
-							dnskey_ds_ok = true;
-							DSok = true
-						}
-					}
-				}
-			}
-			dbController.SaveDNSKEY(dnskey1, dnskey_ds_ok, domain_id, run_id, db)
-			dnskey_ds_ok = false;
-			*/
-		}
-	}
-	//get and save DNSKEY RRSIGS
-	rrsigs := dnskeyRrs
-	for _, rrsig := range rrsigs.Answer {
-		if rrsig1, ok := rrsig.(*dns.RRSIG); ok {
-			if rrsig1.TypeCovered != dns.TypeDNSKEY {
-				continue
-			}
-			dbController.SaveRRSIG(rrsig1, domainId, runId, db)
-		}
-	}
-	return dnskeyFound
-}
+	/*check DNSSEC*/
 
-func getAndSaveNSECinfo(domainName string, servers []string, domainId int, runId int, db *sql.DB) {
-	d := domainName
-	domainName = weirdStringSubdomainName + "." + d
-	in, _, err := dnsUtils.GetRecordSetWithDNSSEC(domainName, dns.TypeA, servers, dnsClient)
+	/*ds*/
+	dss, _, err := dnsUtils.GetRecordSet(domainName, dns.TypeDS, configServers,dnsClient)
 	if err != nil {
-		fmt.Println(err.Error())
-		manageError(strings.Join([]string{"nsec/3", domainName, err.Error()}, ""))
+		//manageError(strings.Join([]string{"DS record", domainName, err.Error()}, ""))
 	} else {
-		nonExistenceStatus := in.Rcode
-		dbController.UpdateNonExistence(domainId, nonExistenceStatus, db)
+		dsOk := false
+		dsFound := false
 
-		for _, ans := range in.Ns {
-			//authority section
-			if nsec, ok := ans.(*dns.NSEC); ok {
-
-				last := nsec.Hdr.Name
-				next := nsec.NextDomain
-				ttl := int(nsec.Hdr.Ttl)
-
-				//nsec_id:=dbController.SaveNsec(domain_id, last, next, ttl, run_id, db)
-				dbController.SaveNsec(domainId, last, next, ttl, runId, db)
-				/*ToDo do this in analysis
-				ncover := false
-				ncoverwc := false
-				niswc := false
-				if (dnsUtils.Less(domain_name, last) == 0) {
-					niswc=true
-				}else {
-					wildcarddomain_name := "*." + d
-					if (dnsUtils.Less(wildcarddomain_name, next) < 0) {
-						ncoverwc = true
-					}
-					if ((dnsUtils.Less(domain_name, next) < 0 && dnsUtils.Less(domain_name, last) > 0) || (dnsUtils.Less(domain_name, last) > 0 && next == d)) {
-						ncover = true
-					}
-				}
-
-				expired:=false
-				key_found:= false
-				verified := false
-				for _, ats := range in.Ns {
-					if rrsig, ok := ats.(*dns.RRSIG); ok {
-						expired = false
-						key_found = false
-						verified = false
+		var dsRrset []dns.RR
+		for _, ds := range dss.Answer {
+			if ds1, ok := ds.(*dns.DS); ok {
+				dsFound =true
+				dsRrset = append(dsRrset,ds1)
+				var algorithm = int(ds1.Algorithm)
+				var keyTag = int(ds1.KeyTag)
+				var digestType = int(ds1.DigestType)
+				digest := ds1.Digest
+				dbController.SaveDS(domainId, algorithm, keyTag, digestType, digest, runId, db)
+			}
+		}
+		if dsFound {
+			rrsigs, _, err := dnsUtils.GetRecordSetWithDNSSEC(domainName, dns.TypeDS, configServers, dnsClient)
+			if err != nil {
+				//manageError(strings.Join([]string{"DS record", domainName, err.Error()}, ""))
+			} else {
+				for _, ds := range rrsigs.Answer {
+					if rrsig, ok := ds.(*dns.RRSIG); ok {
+						dbController.SaveRRSIG(rrsig, domainId, runId, db)
+						expired := false
+						keyFound := false
+						verified := false
 						var dnskeys *dns.Msg
-						if (rrsig.TypeCovered != dns.TypeNSEC) {
+
+						if rrsig.TypeCovered != dns.TypeDS {
 							continue
 						}
 						if !rrsig.ValidityPeriod(time.Now().UTC()) {
 							expired = true
 						}
 						//---------------DNSKEY----------------------------
-						if (rrsig.SignerName != domain_name) {
-							dnskeys, _, _ = dnsUtils.GetRecordSetWithDNSSEC(rrsig.SignerName, dns.TypeDNSKEY, servers, dns_client)
-						} else {
-							dnskeys = dnskeys_domain_name
-						}
-
-
-
-						if (dnskeys != nil && dnskeys.Answer != nil) {
+						dnskeys, _, _ = dnsUtils.GetRecordSetWithDNSSEC(rrsig.SignerName, dns.TypeDNSKEY, configServers, dnsClient)
+						if dnskeys != nil && dnskeys.Answer != nil {
 							key := dnsUtils.FindKey(dnskeys, rrsig)
-							if (key != nil) {
-								key_found = true
-								var rrset []dns.RR
-								rrset = []dns.RR{nsec}
-								if err := rrsig.Verify(key, rrset); err != nil {
-									verified=false
-								}else{
-									verified=true
-
+							if key != nil {
+								keyFound = true
+								if err := rrsig.Verify(key, dsRrset); err != nil {
+									fmt.Printf(";- Bogus signature, %s does not validate (DNSKEY %s/%d/%s) [%s] %s\n", rrsig.Hdr.Name, key.Header().Name, key.KeyTag(), "net", err, expired)
+									verified = false
+								} else {
+									verified = true
 								}
 							}
+						} else {
+							fmt.Println("DS error no key found")
 						}
-						if (key_found && verified && !expired) {
+						if keyFound && verified && !expired {
+							dsOk = true
 							break
 						}
 					}
 				}
-				dbController.UpdateNSEC(false, ncover, ncoverwc, niswc, nsec_id, db) //TODO check this
-				*/
-			} else {
-				if nsec3, ok := ans.(*dns.NSEC3); ok {
-					hashedName := nsec3.Hdr.Name
-					nextHashedName := nsec3.NextDomain
-					iterations := int(nsec3.Iterations)
-					hashAlgorithm := int(nsec3.Hash)
-					salt := nsec3.Salt
-					//nsec3_id:=dbController.SaveNsec3(domain_id, hashed_name, next_hashed_name, iterations, hash_algorithm, salt, run_id, db)
-					dbController.SaveNsec3(domainId, hashedName, nextHashedName, iterations, hashAlgorithm, salt, runId, db)
-					/* TODO do this in analysis
-					n3cover := false
-					n3coverwc := false
-					n3match := false
-					n3wc := false
-					n3cover = nsec3.Cover(domain_name)
-					n3coverwc = nsec3.Cover("*." + d)
-					n3match = nsec3.Match(d)
-					n3wc = nsec3.Match("*."+d)
-					expired:=false
-					key_found:= false
-					verified := false
+			}
+		}
+		dbController.UpdateDomainDSInfo(domainId, dsFound, dsOk, db)
+	}
 
-					firmas:
-					for _, ats := range in.Ns {
-						if rrsig, ok := ats.(*dns.RRSIG); ok {
-							expired = false
-							key_found = false
-							verified = false
 
-							var dnskeys *dns.Msg
-							if (rrsig.TypeCovered != dns.TypeNSEC3) {
-								continue firmas
-							}
-							if !rrsig.ValidityPeriod(time.Now().UTC()) {
-								expired = true
-							}
-							//---------------DNSKEY----------------------------
-							if (rrsig.SignerName != domain_name) {
-								dnskeys, _, _ = dnsUtils.GetRecordSetWithDNSSEC(rrsig.SignerName, dns.TypeDNSKEY, servers, dns_client)
-							} else {
-								dnskeys = dnskeys_domain_name
-							}
-							if (dnskeys != nil && dnskeys.Answer != nil) {
-								key := dnsUtils.FindKey(dnskeys, rrsig)
-								if (key != nil) {
-									key_found = true
-									var rrset []dns.RR
-									rrset = []dns.RR{nsec3}
-									if err := rrsig.Verify(key, rrset); err != nil {
-										verified=false
-									}else{
-										verified=true
-									}
+	/*dnskeys*/
+
+
+
+	dnskeysLine, _, err := dnsUtils.GetRecordSetWithDNSSEC(domainName, dns.TypeDNSKEY, domainNameServers,dnsClient)
+	if err != nil {
+		manageError(strings.Join([]string{"dnskey", domainName, err.Error()}, ""))
+	} else {
+		if len(dnskeysLine.Answer) != 0 {
+			dnskeyFound := false
+			dnskeyOk := false
+			var dnskeyRrset []dns.RR
+			/*si no tiene dnskey no busco nada de dnssec*/
+			for _, dnskey := range dnskeysLine.Answer {
+				if dnskey1, ok := dnskey.(*dns.DNSKEY); ok {
+					dnskeyFound = true
+					dnskeyRrset = append(dnskeyRrset, dnskey1)
+					DSok := false
+					if dnskey1.Flags == 1 {
+						//check DS
+						ds1 := dnskey1.ToDS(dnskey1.Algorithm)
+						for _, ds := range dss.Answer {
+							if ds2, ok := ds.(*dns.DS); ok {
+								if ds2.Digest == ds1.Digest {
+									DSok = true
 								}
-							}
-							if(key_found && verified && !expired){
-								break
 							}
 						}
 					}
-					dbController.UpdateNSEC3(false, verified, expired, n3match, n3cover, n3coverwc, n3wc, nsec3_id, db)//TODO check this
-					*/
+					dbController.SaveDNSKEY(dnskey1, DSok, domainId, runId, db)
+				}
+			}
+			rrsigs := dnskeysLine
+			for _, rrsig := range rrsigs.Answer {
+				if rrsig1, ok := rrsig.(*dns.RRSIG); ok {
+					if rrsig1.TypeCovered != dns.TypeDNSKEY {
+						continue
+					}
+					dbController.SaveRRSIG(rrsig1, domainId, runId, db)
+					expired := false
+					keyFound := false
+					verified := false
+					var dnskeys *dns.Msg
+
+					if !rrsig1.ValidityPeriod(time.Now().UTC()) {
+						expired = true
+					}
+					//---------------DNSKEY----------------------------
+					dnskeys, _, _ = dnsUtils.GetRecordSetWithDNSSEC(rrsig1.SignerName, dns.TypeDNSKEY, configServers, dnsClient)
+					if dnskeys != nil && dnskeys.Answer != nil {
+						key := dnsUtils.FindKey(dnskeys, rrsig1)
+						if key != nil {
+							keyFound = true
+							if err := rrsig1.Verify(key, dnskeyRrset); err != nil {
+								verified = false
+							} else {
+								verified = true
+							}
+						}
+					} else {
+						//fmt.Println("DS error no key found")
+					}
+					if keyFound && verified && !expired {
+						dnskeyOk = true
+						break
+					}
+				}
+			}
+
+			dbController.UpdateDomainDNSKEYInfo(domainId, dnskeyFound, dnskeyOk, db)
+
+			/*nsec/3*/
+			{
+				d := domainName
+				line := weirdStringSubdomainName + "." + d
+				t := dns.TypeA
+				in, _, err := dnsUtils.GetRecordSetWithDNSSEC(line, t, domainNameServers, dnsClient)
+				if err != nil {
+					fmt.Println(err.Error())
+					manageError(strings.Join([]string{"nsec/3", line, err.Error()}, ""))
+				} else {
+					nonExistenceStatus := in.Rcode
+					dbController.UpdateNonExistence(domainId, nonExistenceStatus, db)
+
+					for _, ans := range in.Ns {
+						//authority section
+						if nsec, ok := ans.(*dns.NSEC); ok {
+							ncover := false
+							ncoverwc := false
+							niswc := false
+							last := nsec.Hdr.Name
+							next := nsec.NextDomain
+							ttl := int(nsec.Hdr.Ttl)
+							//save nsec
+							nsecId := dbController.SaveNsec(domainId, last, next, ttl, runId, db)
+							/*verify nsec in other task*/
+
+							if dnsUtils.Less(line, last) == 0 {
+								niswc = true
+							} else {
+								wildcardline := "*." + d
+								if dnsUtils.Less(wildcardline, next) < 0 {
+									ncoverwc = true
+								}
+								if (dnsUtils.Less(line, next) < 0 && dnsUtils.Less(line, last) > 0) || (dnsUtils.Less(line, last) > 0 && next == d) {
+									ncover = true
+								}
+							}
+							expired := false
+							keyFound := false
+							verified := false
+							for _, ats := range in.Ns {
+								if rrsig, ok := ats.(*dns.RRSIG); ok {
+									expired = false
+									keyFound = false
+									verified = false
+									var dnskeys *dns.Msg
+									if rrsig.TypeCovered != dns.TypeNSEC {
+										continue
+									}
+									if !rrsig.ValidityPeriod(time.Now().UTC()) {
+										expired = true
+									}
+									//---------------DNSKEY----------------------------
+									if rrsig.SignerName != line {
+										dnskeys, _, _ = dnsUtils.GetRecordSetWithDNSSEC(rrsig.SignerName, dns.TypeDNSKEY, configServers, dnsClient)
+									} else {
+										dnskeys = dnskeysLine
+									}
+
+									if dnskeys != nil && dnskeys.Answer != nil {
+										key := dnsUtils.FindKey(dnskeys, rrsig)
+										if key != nil {
+											keyFound = true
+											var rrset []dns.RR
+											rrset = []dns.RR{nsec}
+											if err := rrsig.Verify(key, rrset); err != nil {
+												verified = false
+											} else {
+												verified = true
+
+											}
+										}
+									}
+									if keyFound && verified && !expired {
+										break
+									}
+								}
+							}
+							fmt.Println(domainName, ncover, ncoverwc, niswc, nsecId)
+							dbController.UpdateNSEC(keyFound && verified && !expired, ncover, ncoverwc, niswc, nsecId, db)
+
+						} else
+						if nsec3, ok := ans.(*dns.NSEC3); ok {
+							hashedName := nsec3.Hdr.Name
+							nextHashedName := nsec3.NextDomain
+							iterations := int(nsec3.Iterations)
+							hashAlgorithm := int(nsec3.Hash)
+							salt := nsec3.Salt
+							nsec3Id := dbController.SaveNsec3(domainId, hashedName, nextHashedName, iterations, hashAlgorithm, salt, runId, db)
+							n3cover := false
+							n3coverwc := false
+							n3match := false
+							n3wc := false
+							n3cover = nsec3.Cover(line)
+							n3coverwc = nsec3.Cover("*." + d)
+							n3match = nsec3.Match(d)
+							n3wc = nsec3.Match("*." + d)
+							expired := false
+							keyFound := false
+							verified := false
+						firmas:
+							for _, ats := range in.Ns {
+								if rrsig, ok := ats.(*dns.RRSIG); ok {
+									expired = false
+									keyFound = false
+									verified = false
+
+									var dnskeys *dns.Msg
+									if rrsig.TypeCovered != dns.TypeNSEC3 {
+										continue firmas
+									}
+									if !rrsig.ValidityPeriod(time.Now().UTC()) {
+										expired = true
+									}
+									fmt.Println(domainName,"expired:", expired)
+									//---------------DNSKEY----------------------------
+									if rrsig.SignerName != line {
+										dnskeys, _, _ = dnsUtils.GetRecordSetWithDNSSEC(rrsig.SignerName, dns.TypeDNSKEY, configServers, dnsClient)
+									} else {
+										dnskeys = dnskeysLine
+									}
+									if dnskeys != nil && dnskeys.Answer != nil {
+										key := dnsUtils.FindKey(dnskeys, rrsig)
+										if key != nil {
+											keyFound = true
+											fmt.Println(domainName,"keyFound", keyFound)
+											var rrset []dns.RR
+											rrset = []dns.RR{nsec3}
+											if err := rrsig.Verify(key, rrset); err != nil {
+												verified = false
+
+											} else {
+												verified = true
+
+											}
+											fmt.Println(domainName,"verified:", verified)
+										}
+									}
+									if keyFound && verified && !expired {
+										break
+									}
+								}
+							}
+
+							fmt.Println(domainName,n3match, n3cover, n3coverwc, n3wc, nsec3Id)
+							dbController.UpdateNSEC3(keyFound && verified && !expired, keyFound, verified, expired, n3match, n3cover, n3coverwc, n3wc, nsec3Id, db)
+						}
+					}
 				}
 			}
 		}
 	}
-	return
-}
 
-func getAndSaveDNSSECinfo(domainName string, domainNameServers []string, domainId int, runId int, db *sql.DB) (dnskeyFound bool) {
 
-	// Get DNSKEYS
-	dnskeyRrs, _, err := dnsUtils.GetRecordSetWithDNSSEC(domainName, dns.TypeDNSKEY, domainNameServers, dnsClient)
-	dnskeyFound = false
-	if err != nil {
-		manageError(strings.Join([]string{"dnskey", domainName, err.Error()}, ""))
-		return dnskeyFound
-	}
-	if len(dnskeyRrs.Answer) == 0 {
-		return dnskeyFound
-	}
-
-	//if any dnskey found, continue... else return (above)
-	dnskeyFound = getAndSaveDNSKEYs(dnskeyRrs, domainName, domainNameServers, domainId, runId, db)
-
-	//DSok := false
-	//dnskey_ds_ok := false
-	//var ds_rrset []dns.RR;
-	getAndSaveDS(domainName, configServers, domainId, runId, db)
-
-	dbController.UpdateDomainDNSKEYInfo(domainId, dnskeyFound, false, db) //TODO update this, second argument always false
-
-	//get and save nsec/3 info
-
-	return dnskeyFound
+	//dnskeyFound,  err := getAndSaveDNSKEYs( domainName, domainNameServers, domainId, runId, db)
+	//if err != nil {
+	//	manageError(strings.Join([]string{"dnskey", domainName, err.Error()}, ""))
+	//	return dnskeyFound
+	//}
+	//if !dnskeyFound {
+	//	return dnskeyFound
+	//}
+	//getAndSaveDS(domainName, configServers, domainId, runId, db)
+	//dbController.UpdateDomainDNSKEYInfo(domainId, dnskeyFound, false, db) //TODO update this, second argument always false
+	//if(dnskeyFound) {
+		//get and save nsec/3 info
+	//	getAndSaveNSECinfo(domainName, configServers, domainId, runId, db)
+	//}
+	//return dnskeyFound
 }
 
 // Collects info from a single domain (ran by a routine) and save it to the databses.
 func collectSingleDomainInfo(domainName string, runId int, db *sql.DB) {
-
 	var domainId int
 	// Create domain and save it in database
 	domainId = dbController.SaveDomain(domainName, runId, db)
 
 	/*Obtener NS del dominio*/
 	var domainNameServers []string
+	var domainNameServers4 []string
+
 	{ //Check NSs of the domain
 		/*Obtener NSs del dominio*/
-		var domainsNameservers []dns.RR = getDomainsNameservers(domainName)
+		var domainsNameservers = getDomainsNameservers(domainName)
 
 		for _, nameserver := range domainsNameservers { //for each nameserver of the current domain_name
 			if ns, ok := nameserver.(*dns.NS); ok {
@@ -631,9 +692,11 @@ func collectSingleDomainInfo(domainName string, runId int, db *sql.DB) {
 						manageError(strings.Join([]string{"getANS", domainName, ns.Ns, err.Error()}, ""))
 					} else {
 						for _, ip := range ipv4 {
-							nameserverIpString := obtain_NS_IPv4_info(ip, domainId, domainName, nameserverId, runId, db)
+							nameserverIpString := obtainNsIpv4Info(ip, domainName, nameserverId, runId, db)
+							fmt.Println(domainName, "nameserverIpString", nameserverIpString)
 							if nameserverIpString != "" {
 								domainNameServers = append(domainNameServers, nameserverIpString)
+								domainNameServers4 = append(domainNameServers4, nameserverIpString)
 							}
 						}
 					}
@@ -643,7 +706,8 @@ func collectSingleDomainInfo(domainName string, runId int, db *sql.DB) {
 						manageError(strings.Join([]string{"getAAAANS", domainName, ns.Ns, err.Error()}, ""))
 					} else {
 						for _, ip := range ipv6 {
-							nameserverIpString := obtain_NS_IPv6_info(ip, domainId, domainName, nameserverId, runId, db)
+							nameserverIpString := obtainNsIpv6Info(ip, nameserverId, runId, db)
+							fmt.Println(domainName, "nameserverIpString", nameserverIpString)
 							if nameserverIpString != "" {
 								domainNameServers = append(domainNameServers, nameserverIpString)
 							}
@@ -676,15 +740,15 @@ func collectSingleDomainInfo(domainName string, runId int, db *sql.DB) {
 	} // end check nameservers
 
 	//Check domain info (asking to NS)
-	if len(domainNameServers) != 0 {
+	if len(domainNameServers4) != 0 {
 
 		//Get A and AAAA records
-		getAndSaveDomainIPv4(domainName, domainNameServers, domainId, runId, db)
-		getAndSaveDomainIPv6(domainName, domainNameServers, domainId, runId, db)
+		getAndSaveDomainIPv4(domainName, domainNameServers4, domainId, runId, db)
+		getAndSaveDomainIPv6(domainName, domainNameServers4, domainId, runId, db)
 		// Check SOA record
-		getAndSaveDomainSOA(domainName, domainNameServers, domainId, runId, db)
+		getAndSaveDomainSOA(domainName, domainNameServers4, domainId, db)
 		// Get DNSSEC info
-		getAndSaveDNSSECinfo(domainName, domainNameServers, domainId, runId, db)
+		getAndSaveDNSSECinfo(domainName, domainNameServers4, domainId, runId, db)
 	}
 
 }
@@ -699,3 +763,5 @@ func isIPInDontProbeList(ip net.IP) bool {
 	}
 	return false
 }
+
+
