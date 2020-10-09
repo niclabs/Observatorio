@@ -2,8 +2,8 @@ package main
 
 import (
 	"fmt"
-	"github.com/niclabs/Observatorio/dataCollector"
 	"github.com/niclabs/Observatorio/dataAnalyzer"
+	"github.com/niclabs/Observatorio/dataCollector"
 	"github.com/niclabs/Observatorio/geoIPUtils"
 	"gopkg.in/yaml.v2"
 	"os"
@@ -33,8 +33,8 @@ type Config struct {
 	} `yaml:"geoip"`
 }
 
-var CONFIG_FILE string = "config.yml"
-var err error
+var CONFIG_FILE = "config.yml"
+
 
 
 func main() {
@@ -54,13 +54,13 @@ func main() {
 		return
 	}
 	//Check if a dns server is set in the config file
-	if (len(cfg.RunArguments.DnsServers)==0){
+	if len(cfg.RunArguments.DnsServers)==0 {
 		fmt.Printf("you must add at least one dns server in the config file.")
 		return
 	}
 
 	//Init geoip databases
-	var geoipDB *geoIPUtils.GeoipDB = geoIPUtils.InitGeoIP(cfg.Geoip.GeoipPath, cfg.Geoip.GeoipCountryFilename, cfg.Geoip.GeoipAsnFilename, cfg.Geoip.GeoipLicenseKey)
+	var geoipDB = geoIPUtils.InitGeoIP(cfg.Geoip.GeoipPath, cfg.Geoip.GeoipCountryFilename, cfg.Geoip.GeoipAsnFilename, cfg.Geoip.GeoipLicenseKey)
 
 	//Initialize collect
 	err = dataCollector.InitCollect(cfg.RunArguments.DontProbeFilepath, cfg.RunArguments.DropDatabase, cfg.Database.Username, cfg.Database.Password, cfg.Database.Host,cfg.Database.Port, cfg.Database.DatabaseName, geoipDB, cfg.RunArguments.DnsServers)

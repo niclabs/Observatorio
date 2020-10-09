@@ -44,15 +44,25 @@ func InitGeoIP(geoipPath string, geoipCountryDbName string, geoipAsnDbName strin
 }
 
 func CloseGeoIP(geoipDB *GeoipDB) {
-	geoipDB.CountryDb.Close()
-	geoipDB.AsnDb.Close()
+	err :=geoipDB.CountryDb.Close()
+	if err!=nil{
+		fmt.Println(err)
+	}
+	err = geoipDB.AsnDb.Close()
+	if err!=nil{
+		fmt.Println(err)
+	}
 }
 
 func downloadGeoIp(licenseKey string, geoipPath string, geoipAsnFilename string, geoipCountryFilename string) bool {
 
 	//check if directory exists (create if not exists)
 	if _, err := os.Stat(geoipPath); os.IsNotExist(err) {
-		os.Mkdir(geoipPath,os.ModePerm)
+		err = os.Mkdir(geoipPath,os.ModePerm)
+		if err!=nil{
+			fmt.Println(err)
+			return false
+		}
 	}
 	urlAsn := "https://download.maxmind.com/app/geoip_download?edition_id=GeoLite2-ASN&license_key="+ licenseKey +"&suffix=tar.gz"
 	urlCountry := "https://download.maxmind.com/app/geoip_download?edition_id=GeoLite2-Country&license_key="+ licenseKey +"&suffix=tar.gz"
@@ -67,48 +77,56 @@ func downloadGeoIp(licenseKey string, geoipPath string, geoipAsnFilename string,
 
 	return true
 }
-func downloadFile(url string, filepath string,  wg *sync.WaitGroup )(err error) {
+func downloadFile(url string, filepath string,  wg *sync.WaitGroup ) {
 	defer fmt.Println("download wgdone")
 	defer wg.Done()
-	fmt.Println(url)
 	// Get the data
 	resp, err := http.Get(url)
 	if err != nil {
-		fmt.Println(err)
-		return err
+		log.Fatal(err)
+		return
 	}
+	fmt.Println(resp.Status)
 	defer resp.Body.Close()
 	// Create the file
 	out, err := os.Create(filepath+".tar.gz")
 	if err != nil {
-		fmt.Println(err)
-		return err
+		log.Fatal(err)
+		return
 	}
 	defer os.Remove(filepath+".tar.gz")
 	defer out.Close()
 	// Write the body to file
 	_, err = io.Copy(out, resp.Body)
-	targz, _ := os.Open(filepath+".tar.gz")
+	if err!=nil{
+		log.Fatal(err)
+	}
+
+	targz, err := os.Open(filepath+".tar.gz")
+	if err!=nil{
+		log.Fatal(err)
+	}
 	defer targz.Close()
 	newFolderName := utils.ExtractTarGz(targz)
-	defer os.RemoveAll(newFolderName)
+	//defer os.RemoveAll(newFolderName)
 	folderType :=""
 	if strings.Contains(newFolderName,"ASN"){
 		folderType = "ASN"
 	}else{
 		folderType = "Country"
 	}
-	newFilepath := newFolderName + "Geolite2-" + folderType + ".mmdb"
-	newLocation := "Geolite/Geolite2-" + folderType + ".mmdb"
-	err = os.Rename(newFilepath, newLocation)
+	newFilepath := newFolderName + "GeoLite2-" + folderType + ".mmdb"
+	newLocation := "GeoLite/GeoLite2-" + folderType + ".mmdb"
+
+	err = utils.MoveFile(newFilepath, newLocation)
+
+	//err = os.Rename(newFilepath, newLocation)
 	if err != nil {
 		log.Fatal(err)
 	}
 
 
-
-
-	return err
+	return
 }
 
 
@@ -168,7 +186,7 @@ func checkDatabases(geoipPath string, geoipCountryDbName string, geoipAsnDbName 
 func getGeoIpCountryDB(file string) (*geoip2.Reader, error) {
 	gi, err := geoip2.Open(file)
 	if err != nil {
-		fmt.Printf("Could not open GeoLite2-Country database: %s\n", err)
+		fmt.Printf("Could not open Geolite2-Country database: %s\n", err)
 		return nil, err
 	}
 	fmt.Printf("GEOLITE2 country db opened\n")
