@@ -8,6 +8,7 @@ import (
 	"github.com/niclabs/Observatorio/dbController"
 	"log"
 	"os"
+	"os/exec"
 	"strconv"
 	"strings"
 	"sync"
@@ -18,7 +19,7 @@ var mutexTT *sync.Mutex
 var csvsFolder string = "csvs"
 
 
-func AnalyzeData(runId int, dbname string, user string, password string, host string, port int) (ts string){
+func AnalyzeData(runId int, dbname string, user string, password string, host string, port int){
 	mutexTT = &sync.Mutex{}
 	t := time.Now()
 	c := 30
@@ -33,8 +34,7 @@ func AnalyzeData(runId int, dbname string, user string, password string, host st
 		fmt.Println(err)
 		return
 	}
-	ts = dbController.GetRunTimestamp(runId, db)
-	fmt.Println(ts)
+	ts := dbController.GetRunTimestamp(runId, db)
 	//TODO fix ts format-> ":" not accepted in windows
 	ts=strings.ReplaceAll(ts,":","-")
 	concurrency := int(c)
@@ -83,7 +83,7 @@ func AnalyzeData(runId int, dbname string, user string, password string, host st
 	fmt.Println("Total Time (min:sec):", TotalTime/60000000000, ":", TotalTime%60000000000/1000000000)
 
 	fmt.Println("openconnections", db.Stats())
-	return ts
+
 }
 func verifyDNSSEC(domainId int, db *sql.DB){
 	//check if dnskey is found
@@ -125,6 +125,19 @@ func getGlobalStatistics(runId int, ts string, db *sql.DB) {
 	saveDispersion(runId, ts, db)
 	saveDNSSEC(runId, ts, db)
 	saveCountNameserverCharacteristics(runId, ts, db)
+	saveJsonRecomendations(runId,ts)
+}
+
+func saveJsonRecomendations(runId int, ts string){
+	filename:="./csvs/"+strconv.Itoa(runId)+"CountNSCountryASNPerDomain"+ts+".csv"
+	newfilename := "./csvs/"+strconv.Itoa(runId)+"CountRecomendations.json"
+
+	//generate json data
+	command:= exec.Command("./json" , filename,newfilename)
+	err:=command.Run()
+	if err != nil {
+		log.Println(err)
+	}
 }
 func initcsvsFolder() {
 	if _, err := os.Stat(csvsFolder); os.IsNotExist(err) {

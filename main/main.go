@@ -7,8 +7,6 @@ import (
 	"github.com/niclabs/Observatorio/geoIPUtils"
 	"gopkg.in/yaml.v2"
 	"os"
-	"os/exec"
-	"strconv"
 )
 
 type Config struct {
@@ -77,20 +75,7 @@ func main() {
 
 	geoIPUtils.CloseGeoIP(geoipDB)
 	//analyze data
-
-
-	fmt.Printf("Analyzing Data...")
-	ts:= dataAnalyzer.AnalyzeData(runId, cfg.Database.DatabaseName, cfg.Database.Username, cfg.Database.Password, cfg.Database.Host, cfg.Database.Port)
-
-	filename:="./csvs/"+strconv.Itoa(runId)+"CountNSCountryASNPerDomain"+ts+".csv"
-	newfilename := "./csvs/"+strconv.Itoa(runId)+"CountRecomendations.json"
-
-	fmt.Println(filename)
-	fmt.Println(newfilename)
-	//generate graphics
-	err =exec.Command(" ./json " + filename +" "+ newfilename ).Run()
-	if(err!=nil){
-		fmt.Println(err)
-	}
+	fmt.Println("Analyzing Data...")
+	dataAnalyzer.AnalyzeData(runId, cfg.Database.DatabaseName, cfg.Database.Username, cfg.Database.Password, cfg.Database.Host, cfg.Database.Port)
 
 }
