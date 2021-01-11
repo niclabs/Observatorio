@@ -8,10 +8,10 @@ geoip:
 
 # Database configurations
 database:
-    dbname: observatorio
-    dbuser: obslac
+    dbname: dbname
+    dbuser: dbuser
     dbpass: password
-    dbhost: 172.21.128.1
+    dbhost: 192.168.1.1
     dbport: 5432
 
 #runing arguments
