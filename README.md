@@ -49,10 +49,10 @@ como se muetsra a continuación:
             geoipupdatescript: UpdateGeoliteDatabases.sh    //name of the script used to update the geolite databases
         # Database configurations
         database:
-            dbname: observatorio                            //name of the database you created
-            dbuser: obslac                                  //user you created
+            dbname: dbname                            //name of the database you created
+            dbuser: dbuser                                  //user you created
             dbpass: password                                //password for the user you created
-            dbhost: 172.21.128.1                            //postgresql host
+            dbhost: 192.168.1.1                           //postgresql host
             dbport: 5432                                    //postgresql port
         #runing arguments
         runargs:
@@ -64,6 +64,7 @@ como se muetsra a continuación:
             debug: false        
             dnsservers: ["8.8.8.8", "1.1.1.1"]              //here put the dns servers you want to resolve the requests
         #End of config data
+Puede duplicar el archivo config.yml.default y renombrar a config.yml, y modificar este. este archivo no debe ser agregado al repo, y se debe mantener en el archivo .gitignore, ya que contiene datos sensibles y credenciales.
 
 Para poder ejecutar existen 2 opciones, ejecutarlo utilizando un contenedor Docker (lo que crea un ambiente aislado y evita instalar librerías adicionales), o ejecutarlo sin el contenedor, con la necesidad de inestalar todo manualmente.
 
