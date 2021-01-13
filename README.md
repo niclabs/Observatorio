@@ -38,7 +38,7 @@ Esta llave debe ser guardada en el archivo de configuración config.yml con el n
 
 #Archivo de configuración
  Independientemente de si usará Docker o no, es necesario llenar el archivo de configuración *config.yml* con los datos correspondientes
-como se muetsra a continuación:
+como se muestra a continuación:
 
         #Reminder: use spaces, yaml doesn't allow tabs
         #Geoip data
@@ -46,22 +46,23 @@ como se muetsra a continuación:
             geoippath: Geolite                              //folder where the geolite dabases are saved
             geoipasnfilename: GeoLite2-ASN.mmdb             //name of the asn geolite database
             geoipcountryfilename: GeoLite2-Country.mmdb     //name of the country geolite database
-            geoipupdatescript: UpdateGeoliteDatabases.sh    //name of the script used to update the geolite databases
+            geoiplicensekey: yourLicenseKey                 //geolite license key
         # Database configurations
         database:
-            dbname: dbname                            //name of the database you created
+            dbname: dbname                                  //name of the database you created
             dbuser: dbuser                                  //user you created
             dbpass: password                                //password for the user you created
-            dbhost: 192.168.1.1                           //postgresql host
+            dbhost: localhost                               //postgresql host
             dbport: 5432                                    //postgresql port
         #runing arguments
         runargs:
             inputfilepath: input-example.txt                //file with the list of domains you want to test
             dontprobefilepath: dontprobefile.txt            //file with the list of IPs you dont want to query
+            verbose: true                                   //print domains with collect in progress   
             concurrency: 100                                //desired concurrency
             ccmax: 100                                      //max concurrency
             maxretry: 2                                     //max attemps to retry a dns request
-            debug: false        
+            debug: false                                    //print errors if true
             dnsservers: ["8.8.8.8", "1.1.1.1"]              //here put the dns servers you want to resolve the requests
         #End of config data
 Puede duplicar el archivo config.yml.default y renombrar a config.yml, y modificar este. este archivo no debe ser agregado al repo, y se debe mantener en el archivo .gitignore, ya que contiene datos sensibles y credenciales.
