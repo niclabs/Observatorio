@@ -18,6 +18,7 @@ database:
 runargs:
     inputfilepath: input-example.txt
     dontprobefilepath: dontprobefile.txt
+    verbose: true
     concurrency: 100
     ccmax: 100
     maxretry: 2
