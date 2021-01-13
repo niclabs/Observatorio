@@ -13,6 +13,7 @@ type Config struct {
 	RunArguments struct {
 		InputFilepath     string   `yaml:"inputfilepath"`
 		DontProbeFilepath string   `yaml:"dontprobefilepath"`
+		Verbose           bool     `yaml:"verbose"`
 		Concurrency       int      `yaml:"concurrency"`
 		DropDatabase      bool     `yaml:"dropdatabase"`
 		Debug             bool     `yaml:"debug"`
@@ -70,7 +71,7 @@ func main() {
 	}
 
 	//start collect
-	runId := dataCollector.StartCollect(cfg.RunArguments.InputFilepath, cfg.RunArguments.Concurrency, cfg.Database.DatabaseName, cfg.Database.Username, cfg.Database.Password, cfg.Database.Host, cfg.Database.Port, cfg.RunArguments.Debug)
+	runId := dataCollector.StartCollect(cfg.RunArguments.InputFilepath, cfg.RunArguments.Concurrency, cfg.Database.DatabaseName, cfg.Database.Username, cfg.Database.Password, cfg.Database.Host, cfg.Database.Port, cfg.RunArguments.Debug, cfg.RunArguments.Verbose)
 
 
 	geoIPUtils.CloseGeoIP(geoipDB)
