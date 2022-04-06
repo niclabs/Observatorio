@@ -52,12 +52,10 @@ func CheckSOA(line string, servers []string, c *dns.Client) (*dns.Msg, error) {
 }
 
 // Checks if a domain name has an A record
-func CheckAvailability(domain string, ns *dns.NS, c *dns.Client) (bool, time.Duration, error) {
-	_, rtt, err := GetRecordSet(domain, dns.TypeA, []string{ns.Ns}, c)
-	if err != nil {
-		return false, rtt, err
-	}
-	return true, rtt, nil
+func CheckAvailability(domain string, ns *dns.NS, c *dns.Client) (*dns.Msg, time.Duration, error) {
+	resp, rtt, err := GetRecordSet(domain, dns.TypeA, []string{ns.Ns}, c)
+
+	return resp, rtt, err
 
 }
 

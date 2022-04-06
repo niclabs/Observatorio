@@ -7,7 +7,6 @@ import (
 	"log"
 	"strings"
 	"time"
-
 )
 
 func CreateTables(db *sql.DB, drop bool) {
@@ -26,7 +25,7 @@ func CreateTables(db *sql.DB, drop bool) {
 	}
 
 	DropTable("nameserver", db, drop)
-	_, err = db.Exec("CREATE TABLE IF NOT EXISTS nameserver ( id SERIAL PRIMARY KEY, run_id integer REFERENCES runs(id), domain_id  integer REFERENCES domain(id), name varchar(253), response bool, edns bool, recursivity bool, tcp bool, zone_transfer bool, loc_query bool)")
+	_, err = db.Exec("CREATE TABLE IF NOT EXISTS nameserver ( id SERIAL PRIMARY KEY, run_id integer REFERENCES runs(id), domain_id  integer REFERENCES domain(id), name varchar(253), response bool, edns bool, recursivity bool, tcp bool, zone_transfer bool, loc_query bool, authoritative bool)")
 	if err != nil {
 		fmt.Println("OpenConnections", db.Stats())
 		panic(err)
@@ -135,41 +134,40 @@ func SaveDNSKEY(dnskey *dns.DNSKEY, dsok bool, domainId int, runId int, db *sql.
 	}
 }
 
-
 type DNSKEY struct {
 	PublicKey string
-	Owner string
-	Ttl int
-	KeyType int
-	Protocol int
+	Owner     string
+	Ttl       int
+	KeyType   int
+	Protocol  int
 	Algorithm int
-	KeyTag int
+	KeyTag    int
 }
 
-func getDNSKEYs(domainId int, runId int, db *sql.DB, dnskeys []DNSKEY)(size int){
+func getDNSKEYs(domainId int, runId int, db *sql.DB, dnskeys []DNSKEY) (size int) {
 	query := `SELECT public_key, owner, ttl, type, protocol, algorithm, keytag 
 				from dnskey where run_id=$1 and domain_id=$2;`
 
-	rows, err:= db.Query(query, runId, domainId)
+	rows, err := db.Query(query, runId, domainId)
 
 	if err != nil {
 		panic(err)
 	}
 	defer rows.Close()
-	i:=0
-	publicKey:=""
-	owner:=""
-	ttl:=-1
-	keyType:=-1
-	protocol:=-1
-	algorithm :=-1
-	keyTag:=-1
+	i := 0
+	publicKey := ""
+	owner := ""
+	ttl := -1
+	keyType := -1
+	protocol := -1
+	algorithm := -1
+	keyTag := -1
 
 	for rows.Next() {
 		if err := rows.Scan(&publicKey, &owner, &ttl, &keyType, &protocol, &algorithm, &keyTag); err != nil {
 			log.Fatal(err)
 		}
-		dnskeys[i]=DNSKEY{PublicKey: publicKey, Owner: owner, Ttl: ttl, KeyType:keyType, Protocol: protocol, Algorithm: algorithm, KeyTag:keyTag}
+		dnskeys[i] = DNSKEY{PublicKey: publicKey, Owner: owner, Ttl: ttl, KeyType: keyType, Protocol: protocol, Algorithm: algorithm, KeyTag: keyTag}
 		i++
 	}
 	return i
@@ -200,10 +198,10 @@ func SaveDomainIp(ip string, domainid int, runId int, db *sql.DB) {
 		panic(err)
 	}
 }
-func CreateNS(ns *dns.NS, domainId int, runId int, db *sql.DB, available bool) int {
+func CreateNS(ns *dns.NS, domainId int, runId int, db *sql.DB, available bool, authoritative bool) int {
 	var nameserverid int
 
-	err := db.QueryRow("INSERT INTO nameserver(name, domain_id, response, run_id) VALUES($1, $2, $3, $4) RETURNING id", ns.Ns, domainId, available, runId).Scan(&nameserverid)
+	err := db.QueryRow("INSERT INTO nameserver(name, domain_id, response, authoritative, run_id) VALUES($1, $2, $3, $4, $5) RETURNING id", ns.Ns, domainId, available, authoritative, runId).Scan(&nameserverid)
 	if err != nil {
 		fmt.Println("OpenConnections", db.Stats(), " DomainId: ", domainId)
 		panic(err)

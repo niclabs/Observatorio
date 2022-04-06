@@ -28,3 +28,4 @@ elcuartodigital.cl
 puertolirquen.cl
 yuyu.cl
 nic.cl
+wsp.cl
